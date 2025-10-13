@@ -1,0 +1,221 @@
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.button import Button
+from kivy.uix.textinput import TextInput
+from kivy.uix.image import Image
+from kivy.core.audio import SoundLoader
+from kivy.core.window import Window
+from kivy.animation import Animation
+from kivy.clock import Clock
+from kivy.graphics import Color, RoundedRectangle
+import os
+import threading
+import json
+import websocket
+
+class SoundButton(BoxLayout):
+    current_button = None
+
+    def __init__(self, text, sound, icon_path=None, app=None, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.orientation = 'horizontal'
+        self.size_hint_y = None
+        self.height = 150
+        self.spacing = 10
+        self.padding = [10, 10, 10, 10]
+        self.sound = sound
+        self.btn_text = text
+        self.is_expanded = False
+        self.pinned = False
+
+        with self.canvas.before:
+            Color(0, 0, 0, 0.1)
+            self.shadow = RoundedRectangle(pos=(self.x - 2, self.y - 2),
+                                           size=(self.width + 4, self.height + 4),
+                                           radius=[20])
+            self.bg_color = Color(0.25, 0.25, 0.35, 1)
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
+
+        if icon_path and os.path.exists(icon_path):
+            icon = Image(source=icon_path, size_hint=(None, 1), width=50)
+            self.add_widget(icon)
+
+        self.button = Button(
+            text=text,
+            size_hint=(1, 1),
+            background_normal='',
+            background_color=(0, 0, 0, 0),
+            color=(1, 1, 1, 1),
+            halign="center",
+            valign="middle"
+        )
+        self.button.text_size = (None, None)
+        self.button.bind(on_press=self.play_sound)
+        self.button.bind(on_touch_down=self.start_long_press, on_touch_up=self.end_long_press)
+        self.add_widget(self.button)
+
+        self.bind(pos=self.update_rect, size=self.update_rect)
+
+        self._long_press_trigger = Clock.create_trigger(self.expand, 0.5)
+
+    def update_rect(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+        self.shadow.pos = (self.x - 2, self.y - 2)
+        self.shadow.size = (self.width + 4, self.height + 4)
+
+    def play_sound(self, instance=None):
+        if SoundButton.current_button and SoundButton.current_button != self:
+            SoundButton.current_button.stop_sound_and_collapse()
+
+        SoundButton.current_button = self
+
+        if self.sound:
+            self.sound.stop()
+            self.sound.play()
+            self.start_highlight()
+            Clock.schedule_interval(self.check_sound, 0.1)
+
+    def start_highlight(self):
+        anim = Animation(rgba=(0.5, 0.5, 0.7, 1), duration=0.2) + \
+               Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2)
+        anim.repeat = True
+        anim.start(self.bg_color)
+        self.highlight_anim = anim
+
+    def stop_highlight(self):
+        if hasattr(self, "highlight_anim"):
+            self.highlight_anim.cancel(self.bg_color)
+            self.bg_color.rgba = (0.25, 0.25, 0.35, 1)
+
+    def check_sound(self, dt):
+        if self.sound.state != 'play':
+            self.stop_highlight()
+            if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
+                self.collapse()
+            return False
+        return True
+
+    def start_long_press(self, instance, touch):
+        if instance.collide_point(*touch.pos):
+            self._long_press_trigger()
+        return False
+
+    def end_long_press(self, instance, touch):
+        self._long_press_trigger.cancel()
+        return False
+
+    def expand(self, *args):
+        if self.is_expanded:
+            return
+
+        # Сжимаем все остальные кнопки
+        if self.app:
+            for btn in self.app.buttons:
+                if btn != self and btn.is_expanded and not getattr(self.app, "pin_active", False):
+                    btn.collapse()
+
+        self.is_expanded = True
+        anim = Animation(pos=(0, 0), size=(Window.width, Window.height), duration=0.3, t='out_quad')
+        anim.start(self)
+
+    def collapse(self):
+        if not self.is_expanded or getattr(App.get_running_app(), "pin_active", False):
+            return
+        self.is_expanded = False
+        anim = Animation(size=(self.width, 150), pos=self.pos, duration=0.3, t='out_quad')
+        anim.start(self)
+
+    def stop_sound_and_collapse(self):
+        if self.sound:
+            self.sound.stop()
+        self.stop_highlight()
+        if not getattr(App.get_running_app(), "pin_active", False):
+            self.collapse()
+
+
+class DraggableBox(BoxLayout):
+    def on_touch_down(self, touch):
+        for child in reversed(self.children):
+            if child.collide_point(*touch.pos):
+                child.drag_start_y = touch.y
+                self.dragged = child
+                self.drag_index = self.children.index(child)
+                return super().on_touch_down(touch)
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if hasattr(self, 'dragged') and self.dragged:
+            dy = touch.y - self.dragged.drag_start_y
+            self.dragged.y += dy
+            self.dragged.drag_start_y = touch.y
+            children_sorted = sorted(self.children, key=lambda w: w.y, reverse=True)
+            self.clear_widgets()
+            for w in children_sorted:
+                self.add_widget(w)
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        self.dragged = None
+        return super().on_touch_up(touch)
+
+
+class MyApp(App):
+    def build(self):
+        Window.clearcolor = (0.95, 0.95, 0.98, 1)
+        self.pin_active = False
+        self.buttons = []
+
+        root = BoxLayout(orientation='vertical', spacing=10, padding=10)
+
+        top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=60, spacing=10)
+
+        self.search_input = TextInput(size_hint=(1, 1), hint_text="Search...", multiline=False,
+                                      background_color=(0.9, 0.9, 0.95, 1), foreground_color=(0,0,0,1))
+        self.search_input.bind(text=self.filter_buttons)
+        top_bar.add_widget(self.search_input)
+
+        self.pin_button = Button(text="Pin", size_hint=(None, 1), width=100,
+                                 background_color=(0.4,0.7,1,1), color=(1,1,1,1))
+        self.pin_button.bind(on_release=self.toggle_pin)
+        top_bar.add_widget(self.pin_button)
+
+        root.add_widget(top_bar)
+
+        self.scroll = ScrollView(size_hint=(1, 1))
+        self.layout = DraggableBox(orientation='vertical', spacing=10, size_hint_y=None)
+        self.layout.bind(minimum_height=self.layout.setter('height'))
+        self.scroll.add_widget(self.layout)
+        root.add_widget(self.scroll)
+
+        folder = os.path.dirname(os.path.abspath(__file__))
+        for filename in sorted(os.listdir(folder)):
+            if filename.lower().endswith(".mp3") and filename != "click.mp3":
+                path = os.path.join(folder, filename)
+                sound = SoundLoader.load(path)
+                btn_text = os.path.splitext(filename)[0]
+                icon_file = os.path.join(folder, btn_text + ".png")
+                btn_widget = SoundButton(btn_text, sound, icon_file, app=self)
+                self.layout.add_widget(btn_widget)
+                self.buttons.append(btn_widget)
+
+        return root
+
+    def toggle_pin(self, instance):
+        self.pin_active = not self.pin_active
+        instance.background_color = (0.2,0.5,0.8,1) if self.pin_active else (0.4,0.7,1,1)
+
+    def filter_buttons(self, *args):
+        value = self.search_input.text.lower()
+        for btn_widget in self.buttons:
+            visible = value in btn_widget.btn_text.lower()
+            btn_widget.opacity = 1 if visible else 0
+            btn_widget.disabled = not visible
+            btn_widget.height = 150 if visible else 0
+
+
+if __name__ == "__main__":
+    MyApp().run()
