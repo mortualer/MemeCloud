@@ -1,82 +1,74 @@
-name: Build MemeCloud APK
+name: Build Kivy APK with Buildozer
 
 on:
   push:
     branches:
       - main
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-
     steps:
-      - name: Checkout repository (with submodules)
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: true
 
-      - name: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
-      - name: Install system packages
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
-          pip install --upgrade pip
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk python3-pip python3-setuptools python3-wheel \
+            libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev \
+            libncurses5-dev libsqlite3-dev libgdbm-dev libbz2-dev libreadline-dev \
+            liblzma-dev
+
+      - name: Install Buildozer
+        run: |
+          python3 -m pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools (download & arrange)
+      - name: Create Android SDK directories
         run: |
-          set -e
-          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDK_ROOT/cmdline-tools"
-          cd "$SDK_ROOT/cmdline-tools"
-          echo "Downloading commandline tools..."
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
-          unzip -q tools.zip
-          rm -f tools.zip
-          # If archive unpacked into cmdline-tools/cmdline-tools or into cmdline-tools, fix layout
-          if [ -d "cmdline-tools/bin" ]; then
-            mv cmdline-tools latest || true
-          else
-            # try nested folder
-            if [ -d "cmdline-tools/cmdline-tools/bin" ]; then
-              mkdir -p latest
-              mv cmdline-tools/cmdline-tools/* latest/ || true
-              rm -rf cmdline-tools
-            else
-              # fallback: move any extracted folder contents into latest
-              mkdir -p latest
-              mv * latest/ || true
-            fi
-          fi
-          echo "Contents of cmdline-tools:"
-          ls -R "$SDK_ROOT/cmdline-tools" || true
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+          cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+          # Скачиваем последнюю версию commandline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
+          unzip cmdtools.zip
+          rm cmdtools.zip
+          mv cmdline-tools latest
+          echo "✅ Android commandline-tools installed"
 
-      - name: Ensure sdkmanager exists and accept licenses
+      - name: Accept Android SDK Licenses
         run: |
-          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          echo "PATH=$PATH"
-          if [ ! -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "ERROR: sdkmanager not found at $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-            ls -R "$SDK_ROOT" || true
-            exit 1
-          fi
-          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
+          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Install Android Build Tools and platforms
         run: |
           SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
           export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --sdk_root="$SDK_ROOT" "platform-tools" "build-tools;33.0.2" "platforms;android-33"
+          echo "✅ Build-tools and platforms installed"
+
+      - name: Fix sdkmanager path for Buildozer
+        run: |
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK_ROOT/tools/bin"
+          if [ -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            ln -sf "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$SDK_ROOT/tools/bin/sdkmanager"
+          else
+            echo "❌ sdkmanager not found at $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+            ls -R "$SDK_ROOT"
+            exit 1
+          fi
+          echo "✅ Symlink created at $SDK_ROOT/tools/bin/sdkmanager"
+          ls -l "$SDK_ROOT/tools/bin/"
 
       - name: Initialize git submodules
         run: |
