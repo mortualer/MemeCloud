@@ -34,31 +34,24 @@ jobs:
           rm cmdline-tools.zip
           mkdir -p latest
           mv cmdline-tools/* latest/
-          ls latest/bin
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          chmod +x latest/bin/*
 
-      - name: Ensure sdkmanager is executable
-        run: |
-          chmod +x $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-          ls -l $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+      - name: Add SDK tools to PATH
+        run: echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
       - name: Accept Android SDK licenses
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses || true
 
       - name: Install Android Build Tools & Platforms
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
+          yes | sdkmanager "build-tools;33.0.2" "platform-tools" "platforms;android-33"
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MemeCloud-APK
-          path: bin/*.apk
+          name: MemeC
