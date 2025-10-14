@@ -13,6 +13,7 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
+      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$PATH
 
     steps:
       - name: Checkout repository (with submodules)
@@ -34,7 +35,6 @@ jobs:
 
       - name: Install Android SDK commandline tools
         run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
@@ -47,19 +47,17 @@ jobs:
 
       - name: Install Android Build Tools
         run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
           yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
           yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ # проверяем, что aidl появился
+          ls $ANDROID_HOME/build-tools/33.0.2/ # проверяем aidl
 
       - name: Initialize git submodules
         run: git submodule update --init --recursive || true
 
       - name: Build APK with Buildozer
         run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
