@@ -13,19 +13,18 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$HOME/.local/bin:$PATH
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies and Python packages
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          # Добавляем tar и unzip, zip для распаковки SDK и NDK
           sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
           pip install --upgrade pip
           pip install --user buildozer cython virtualenv
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Android SDK cmdline-tools
         run: |
@@ -36,7 +35,7 @@ jobs:
           rm cmdline-tools.zip
           mkdir -p latest
           mv cmdline-tools/* latest/
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
           yes | sdkmanager --licenses
 
       - name: Install Android Build Tools & Platforms
@@ -47,7 +46,7 @@ jobs:
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$HOME/.local/bin:$PATH
           buildozer android debug
 
       - name: Upload APK artifact
