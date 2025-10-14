@@ -13,7 +13,7 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$HOME/.local/bin
+      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$HOME/.local/bin:$PATH
 
     steps:
       - name: Checkout repository
@@ -22,17 +22,18 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget curl
+          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
           pip install --upgrade pip
           pip install --user buildozer cython virtualenv
 
       - name: Install Android SDK cmdline-tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
+          mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           rm cmdline-tools.zip
+          mkdir -p latest
           mv cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
