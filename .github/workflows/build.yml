@@ -21,10 +21,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget curl tar
           pip install --upgrade pip
           pip install --user buildozer cython virtualenv
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Android SDK cmdline-tools
         run: |
@@ -35,7 +34,12 @@ jobs:
           rm cmdline-tools.zip
           mkdir -p latest
           mv cmdline-tools/* latest/
+          ls latest/bin
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+
+      - name: Accept Android SDK licenses
+        run: |
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
 
       - name: Install Android Build Tools & Platforms
@@ -46,7 +50,7 @@ jobs:
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$HOME/.local/bin:$PATH
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
       - name: Upload APK artifact
