@@ -1,4 +1,4 @@
-name: Build MemeCloud APK
+name: Build APK
 
 on:
   push:
@@ -8,45 +8,50 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
-      ANDROIDSDK_ROOT: ${{ github.workspace }}/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+
     steps:
-      # 1. Получаем код репозитория
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
-      # 2. Настройка Git для Buildozer
-      - name: Configure Git
-        run: |
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-      # 3. Установка зависимостей Python и утилит
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip zip openjdk-17-jdk wget unzip git
+          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      # 4. Установка Android SDK и инструментов
-      - name: Install Android SDK
+      - name: Set up Android SDK
         run: |
-          mkdir -p $ANDROIDSDK_ROOT
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip -d $ANDROIDSDK_ROOT
-          mv $ANDROIDSDK_ROOT/cmdline-tools $ANDROIDSDK_ROOT/tools
-          yes | $ANDROIDSDK_ROOT/tools/bin/sdkmanager --sdk_root=$ANDROIDSDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653" "cmake;3.22.1"
-          yes | $ANDROIDSDK_ROOT/tools/bin/sdkmanager --licenses
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools/latest
+          cd $ANDROID_SDK_ROOT/cmdline-tools/latest
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip commandlinetools-linux-9477386_latest.zip
+          rm commandlinetools-linux-9477386_latest.zip
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
-      # 5. Сборка APK через Buildozer
+      - name: Initialize submodules (python-for-android)
+        run: |
+          git submodule add https://github.com/kivy/python-for-android.git .buildozer/android/platform/python-for-android || true
+          git submodule update --init --recursive
+
       - name: Build APK
         run: |
           buildozer android debug
 
-      # 6. Загрузка готового APK в Artifacts
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MemeCloud
+          name: MemeCloud-APK
           path: bin/*.apk
