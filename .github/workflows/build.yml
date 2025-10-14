@@ -34,13 +34,12 @@ jobs:
 
       - name: Install Android SDK commandline tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          cd $ANDROID_HOME/cmdline-tools/latest
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
           rm cmdline-tools.zip
-          mkdir -p latest/
-          mv cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
@@ -50,7 +49,7 @@ jobs:
           yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
           yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
           yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ # проверяем, что aidl появился
+          ls $ANDROID_HOME/build-tools/33.0.2/ || true # Проверяем наличие aidl
 
       - name: Initialize git submodules
         run: git submodule update --init --recursive || true
