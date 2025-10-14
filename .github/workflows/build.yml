@@ -32,24 +32,45 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools
+      - name: Install Android SDK Commandline Tools (FIXED)
         run: |
+          set -e
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          rm cmdline-tools.zip
-          mv cmdline-tools latest
+
+          echo "📦 Downloading Android commandline tools..."
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
+
+          echo "📂 Extracting..."
+          unzip -q tools.zip
+          rm tools.zip
+
+          # Проверяем, что извлечено
+          if [ ! -d "cmdline-tools/bin" ]; then
+            echo "⚠️ Unexpected folder structure, fixing..."
+            mkdir -p latest
+            mv * latest/ || true
+          else
+            mv cmdline-tools latest
+          fi
+
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+
+          echo "✅ Checking sdkmanager..."
+          if [ ! -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "❌ sdkmanager not found!"
+            ls -R $ANDROID_HOME/cmdline-tools || true
+            exit 1
+          fi
+
+          echo "📜 Accepting SDK licenses..."
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
 
       - name: Install Android Build Tools
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ || echo "⚠️ build-tools not found!"
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
+          ls $ANDROID_HOME/build-tools/33.0.2/ || echo "⚠️ build-tools missing!"
 
       - name: Initialize git submodules
         run: git submodule update --init --recursive || true
@@ -68,3 +89,4 @@ jobs:
         with:
           name: MemeCloud-APK
           path: bin/*.apk
+	
