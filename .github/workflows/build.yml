@@ -11,14 +11,17 @@ jobs:
     env:
       ANDROIDSDK_ROOT: ${{ github.workspace }}/android-sdk
     steps:
+      # Шаг 1: Получаем код репозитория
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Шаг 2: Настройка git, чтобы Buildozer не падал
       - name: Configure Git
         run: |
           git config --global user.email "you@example.com"
           git config --global user.name "Your Name"
 
+      # Шаг 3: Установка зависимостей Python и утилит
       - name: Install dependencies
         run: |
           sudo apt update
@@ -26,6 +29,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
+      # Шаг 4: Установка Android SDK и инструментов
       - name: Install Android SDK
         run: |
           mkdir -p $ANDROIDSDK_ROOT
@@ -35,10 +39,12 @@ jobs:
           yes | $ANDROIDSDK_ROOT/tools/bin/sdkmanager --sdk_root=$ANDROIDSDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653" "cmake;3.22.1"
           yes | $ANDROIDSDK_ROOT/tools/bin/sdkmanager --licenses
 
+      # Шаг 5: Сборка APK через Buildozer
       - name: Build APK
         run: |
           buildozer android debug
 
+      # Шаг 6: Загрузка готового APK в Artifacts
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
