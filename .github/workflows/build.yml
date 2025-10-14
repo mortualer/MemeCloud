@@ -13,6 +13,7 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
+      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
 
     steps:
       - name: Checkout repository
@@ -37,24 +38,29 @@ jobs:
           chmod +x latest/bin/*
 
       - name: Add SDK tools to PATH
-        run: |
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        run: echo "$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
       - name: Verify sdkmanager
         run: |
-          ls -la $ANDROID_HOME/cmdline-tools/latest/bin/
-          sdkmanager --version
+          echo "Checking sdkmanager location and version"
+          $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --version
+          ls -l $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/
 
       - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses
+        run: yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
 
       - name: Install Android Build Tools & Platforms
         run: |
-          sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
+          yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            --sdk_root=$ANDROID_HOME \
+            "build-tools;33.0.2" \
+            "platform-tools" \
+            "platforms;android-33"
+          ls -l $ANDROID_HOME/build-tools/33.0.2/
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          export PATH=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
       - name: Upload APK artifact
@@ -62,3 +68,4 @@ jobs:
         with:
           name: MemeCloud-APK
           path: bin/*.apk
+	
