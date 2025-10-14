@@ -32,61 +32,69 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK Commandline Tools (FIXED)
+      - name: Install Android SDK commandline tools (download & arrange)
         run: |
           set -e
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
-
-          echo "📦 Downloading Android commandline tools..."
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$SDK_ROOT/cmdline-tools"
+          cd "$SDK_ROOT/cmdline-tools"
+          echo "Downloading commandline tools..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O tools.zip
-
-          echo "📂 Extracting..."
           unzip -q tools.zip
-          rm tools.zip
-
-          # Проверяем, что извлечено
-          if [ ! -d "cmdline-tools/bin" ]; then
-            echo "⚠️ Unexpected folder structure, fixing..."
-            mkdir -p latest
-            mv * latest/ || true
+          rm -f tools.zip
+          # If archive unpacked into cmdline-tools/cmdline-tools or into cmdline-tools, fix layout
+          if [ -d "cmdline-tools/bin" ]; then
+            mv cmdline-tools latest || true
           else
-            mv cmdline-tools latest
+            # try nested folder
+            if [ -d "cmdline-tools/cmdline-tools/bin" ]; then
+              mkdir -p latest
+              mv cmdline-tools/cmdline-tools/* latest/ || true
+              rm -rf cmdline-tools
+            else
+              # fallback: move any extracted folder contents into latest
+              mkdir -p latest
+              mv * latest/ || true
+            fi
           fi
+          echo "Contents of cmdline-tools:"
+          ls -R "$SDK_ROOT/cmdline-tools" || true
 
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-
-          echo "✅ Checking sdkmanager..."
-          if [ ! -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "❌ sdkmanager not found!"
-            ls -R $ANDROID_HOME/cmdline-tools || true
+      - name: Ensure sdkmanager exists and accept licenses
+        run: |
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          echo "PATH=$PATH"
+          if [ ! -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "ERROR: sdkmanager not found at $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+            ls -R "$SDK_ROOT" || true
             exit 1
           fi
+          yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-          echo "📜 Accepting SDK licenses..."
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
-
-      - name: Install Android Build Tools
+      - name: Install Android Build Tools and platforms
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ || echo "⚠️ build-tools missing!"
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --sdk_root="$SDK_ROOT" "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
       - name: Initialize git submodules
-        run: git submodule update --init --recursive || true
+        run: |
+          git submodule update --init --recursive || true
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export ANDROID_HOME=$ANDROID_HOME
-          export BUILDOZER_ANDROID_SDK_PATH=$ANDROID_HOME
-          export BUILDOZER_ANDROID_CMDLINE_TOOLS_PATH=$ANDROID_HOME/cmdline-tools/latest
+          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          export ANDROID_HOME="$SDK_ROOT"
+          export BUILDOZER_ANDROID_SDK_PATH="$SDK_ROOT"
+          export BUILDOZER_ANDROID_CMDLINE_TOOLS_PATH="$SDK_ROOT/cmdline-tools/latest"
           buildozer android debug
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
           path: bin/*.apk
-	
