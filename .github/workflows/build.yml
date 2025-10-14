@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
 
     steps:
       - name: Checkout repository (with submodules)
@@ -32,57 +32,38 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Download Android cmdline-tools
+      - name: Download Android commandline tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
+          cd /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
-          echo "📁 Содержимое cmdline-tools:"
-          ls -R .
-          echo "--------------------------------"
+          rm cmdline-tools.zip
+          mkdir -p latest
+          mv cmdline-tools/* latest/ || true
+          echo "✅ cmdline-tools распакованы в:"
+          ls -R /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
 
-      - name: Fix SDK structure and locate sdkmanager
+      - name: Accept Android licenses and install SDK packages
         run: |
-          cd $ANDROID_HOME/cmdline-tools
-          # Проверим разные возможные пути
-          echo "Проверяем возможные пути sdkmanager..."
-          find $ANDROID_HOME/cmdline-tools -type f -name "sdkmanager" || echo "❌ Не найден"
-          # Попробуем переместить в стандартный путь
-          if [ -f "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" ]; then
-            mkdir -p latest
-            mv bin latest/
-          elif [ -f "$ANDROID_HOME/cmdline-tools/cmdline-tools/bin/sdkmanager" ]; then
-            mkdir -p latest
-            mv cmdline-tools/cmdline-tools/bin latest/
-          elif [ -f "$ANDROID_HOME/cmdline-tools/tools/bin/sdkmanager" ]; then
-            mkdir -p latest
-            mv tools/bin latest/
-          fi
-          echo "После перемещения структура:"
-          ls -R $ANDROID_HOME/cmdline-tools
+          export PATH=/home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+          echo "PATH=$PATH"
+          which sdkmanager || echo "⚠️ sdkmanager не найден"
+          yes | sdkmanager --licenses || true
+          yes | sdkmanager --sdk_root=/home/runner/.buildozer/android/platform/android-sdk "platform-tools"
+          yes | sdkmanager --sdk_root=/home/runner/.buildozer/android/platform/android-sdk "build-tools;33.0.2"
+          yes | sdkmanager --sdk_root=/home/runner/.buildozer/android/platform/android-sdk "platforms;android-33"
 
-      - name: Install Android SDK packages
+      - name: Verify build-tools installed
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          echo "Текущий PATH: $PATH"
-          which sdkmanager || echo "⚠️ sdkmanager не найден в PATH"
-          if [ -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
-            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
-            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          else
-            echo "❌ sdkmanager всё ещё не найден, см. структуру выше."
-          fi
+          ls -R /home/runner/.buildozer/android/platform/android-sdk/build-tools || echo "❌ Build-tools не найдены"
 
       - name: Build APK with Buildozer
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          buildozer android debug || echo "⚠️ Build failed — но sdkmanager должен быть найден, смотрим лог."
+          export PATH=/home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+          buildozer android debug
 
       - name: Upload APK artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
