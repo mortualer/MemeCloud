@@ -18,6 +18,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        # убрали submodules полностью
 
       - name: Install system dependencies
         run: |
