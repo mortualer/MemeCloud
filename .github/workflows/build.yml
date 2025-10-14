@@ -13,56 +13,54 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$HOME/.local/bin
 
     steps:
+      # 1. Установим tar заранее, чтобы checkout и submodules работали
+      - name: Ensure tar is installed
+        run: sudo apt-get update && sudo apt-get install -y tar unzip wget zip git openjdk-17-jdk python3-pip
+
+      # 2. Клонируем репозиторий
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
-      - name: Install system dependencies
+      # 3. Устанавливаем Python и зависимости
+      - name: Install Python dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
-          pip install --upgrade pip
-          pip install --user buildozer cython virtualenv
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --user buildozer cython virtualenv
 
-      - name: Download & Setup Android SDK cmdline-tools
+      # 4. Устанавливаем Android cmdline-tools
+      - name: Install Android SDK cmdline-tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           rm cmdline-tools.zip
-          mkdir -p latest
           mv cmdline-tools/* latest/
-          chmod +x latest/bin/*
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses
 
-      - name: Add SDK tools to PATH
-        run: echo "$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-
-      - name: Verify sdkmanager
-        run: |
-          echo "Checking sdkmanager location and version"
-          $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --version
-          ls -l $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/
-
-      - name: Accept Android SDK licenses
-        run: yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-
+      # 5. Устанавливаем build-tools и платформы Android
       - name: Install Android Build Tools & Platforms
         run: |
-          yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-            --sdk_root=$ANDROID_HOME \
-            "build-tools;33.0.2" \
-            "platform-tools" \
-            "platforms;android-33"
-          ls -l $ANDROID_HOME/build-tools/33.0.2/
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
 
+      # 6. (Опционально) Проверка submodule python-for-android
+      #- name: Verify Python-for-Android submodule
+      # run: git submodule status
+
+      # 7. Собираем APK
       - name: Build APK with Buildozer
         run: |
-          export PATH=$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
-          buildozer android debug
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          ~/.local/bin/buildozer android debug
 
+      # 8. Загружаем APK как артефакт
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
