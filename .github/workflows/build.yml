@@ -22,7 +22,8 @@ jobs:
       - name: Install system dependencies and Python packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget curl
+          # Добавляем tar и unzip, zip для распаковки SDK и NDK
+          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
           pip install --upgrade pip
           pip install --user buildozer cython virtualenv
 
