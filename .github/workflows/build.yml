@@ -1,91 +1,69 @@
-name: Build Kivy APK with Buildozer
+name: Build MemeCloud APK
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    env:
+      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
 
-      - name: Set up Python
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
-      - name: Install system dependencies
+      - name: Install system packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip python3-setuptools python3-wheel \
-            libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev \
-            libncurses5-dev libsqlite3-dev libgdbm-dev libbz2-dev libreadline-dev \
-            liblzma-dev
-
-      - name: Install Buildozer
-        run: |
-          python3 -m pip install --upgrade pip
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
+          pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Create Android SDK directories
+      - name: Install Android SDK commandline tools
         run: |
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          # Скачиваем последнюю версию commandline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
-          unzip cmdtools.zip
-          rm cmdtools.zip
-          mv cmdline-tools latest
-          echo "✅ Android commandline-tools installed"
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          rm cmdline-tools.zip
+          mkdir -p latest
+          mv cmdline-tools/* latest/
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses
 
-      - name: Accept Android SDK Licenses
+      - name: Install Android Build Tools
         run: |
-          SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      - name: Install Android Build Tools and platforms
-        run: |
-          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          yes | sdkmanager --sdk_root="$SDK_ROOT" "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-          echo "✅ Build-tools and platforms installed"
-
-      - name: Fix sdkmanager path for Buildozer
-        run: |
-          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDK_ROOT/tools/bin"
-          if [ -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            ln -sf "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "$SDK_ROOT/tools/bin/sdkmanager"
-          else
-            echo "❌ sdkmanager not found at $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-            ls -R "$SDK_ROOT"
-            exit 1
-          fi
-          echo "✅ Symlink created at $SDK_ROOT/tools/bin/sdkmanager"
-          ls -l "$SDK_ROOT/tools/bin/"
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
+          ls $ANDROID_HOME/build-tools/33.0.2/ # проверяем, что aidl появился
 
       - name: Initialize git submodules
-        run: |
-          git submodule update --init --recursive || true
+        run: git submodule update --init --recursive || true
 
       - name: Build APK with Buildozer
         run: |
-          SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
-          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          export ANDROID_SDK_ROOT="$SDK_ROOT"
-          export ANDROID_HOME="$SDK_ROOT"
-          export BUILDOZER_ANDROID_SDK_PATH="$SDK_ROOT"
-          export BUILDOZER_ANDROID_CMDLINE_TOOLS_PATH="$SDK_ROOT/cmdline-tools/latest"
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           buildozer android debug
 
       - name: Upload APK artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
