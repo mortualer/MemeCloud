@@ -13,48 +13,40 @@ jobs:
     env:
       ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
-      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$PATH
+      PATH: $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH:$HOME/.local/bin:$PATH
 
     steps:
-      - name: Checkout repository (with submodules)
+      - name: Checkout repository with submodules
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install system packages
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget curl
           pip install --upgrade pip
-          pip install buildozer cython virtualenv
+          pip install --user buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools
+      - name: Install Android SDK cmdline-tools
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           rm cmdline-tools.zip
-          mkdir -p latest
           mv cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
 
-      - name: Install Android Build Tools
+      - name: Install Android Build Tools & Platforms
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ # проверяем aidl
+          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platform-tools" "platforms;android-33"
+          ls $ANDROID_HOME/build-tools/33.0.2/
 
-      - name: Initialize git submodules
-        run: git submodule update --init --recursive || true
+      - name: Verify Python-for-Android submodule
+        run: git submodule status
 
       - name: Build APK with Buildozer
         run: |
