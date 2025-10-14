@@ -46,7 +46,7 @@ android.ndk_version = r25b
 android.sdk_version = 33
 
 # (str) Android API level
-android.api = 33
+#android.api = 33
 
 # (list) Android permissions
 # e.g. android.permissions = INTERNET
