@@ -1,69 +1,67 @@
 [app]
+
 # (str) Title of your application
 title = MemeCloud
 
 # (str) Package name
 package.name = memecloud
 
-# (str) Package domain (use your domain name)
-package.domain = org.memecloud
+# (str) Package domain (unique)
+package.domain = org.example
 
-# (str) Source code where the main.py live
+# (str) Source code where the main.py is located
 source.dir = .
 
 # (str) Application version
-version = 0.1
+version = 1.0
 
 # (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy
 
-# (str) Name of the kivy bootstrap to use
-bootstrap = sdl2
+# (str) Entry point for your app
+entrypoint = main.py
 
-# (str) Android NDK path (set automatically by Buildozer in GitHub Actions)
-android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r26b
+# (str) Supported orientations: landscape, portrait, all
+orientation = portrait
 
-# (str) Android SDK path (set automatically by Buildozer in GitHub Actions)
-android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
+# (list) Permissions required by the app
+android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
 
-# (int) Minimum Android API level
+# (str) Icon for the app (optional)
+icon.filename = %(source.dir)s/icon.png
+
+# (str) Supported Android architectures
+android.archs = arm64-v8a, armeabi-v7a
+
+# (int) Minimum Android API your app requires
 android.minapi = 21
 
-# (int) Target Android API level
+# (int) Target Android API
 android.api = 33
 
-# (bool) Use Android studio to compile
-android.use_android_studio = true
+# (int) Android SDK Build Tools version
+android.build_tools_version = 33.0.2
 
-# (bool) Use the latest version of Android NDK
-android.use_latest_ndk = true
+# (str) NDK version
+android.ndk = 27b
 
-# (str) Android NDK version (if not using the latest version)
-android.ndk_version = r25b
-
-# (str) Path to the Android SDK
-android.sdk_version = 33
-
-# (str) Android API level
-#android.api = 33
-
-# (list) Android permissions
-# e.g. android.permissions = INTERNET
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
-
-# (list) Pattern to whitelist for inclusion in the APK
-# e.g. android.whitelist = lib/*, assets/*, etc.
-android.whitelist = 
-
-# (list) Pattern to blacklist for exclusion from the APK
-android.blacklist = 
-
-# (bool) Copy libraries that are used in the app (default is False)
-android.copylibs = True
-
-# (str) Android NDK API level
+# (int) NDK API level
 android.ndk_api = 21
 
-# (bool) Build for all architectures (default is False)
-android.archs = armeabi-v7a, arm64-v8a
+# (str) Bootstrap to use for packaging
+android.bootstrap = sdl2
+
+# (bool) Copy libraries instead of using shared
+android.copy_libs = 1
+
+# (str) Presplash image
+presplash.filename = %(source.dir)s/presplash.png
+
+# (str) Application icon for Android
+android.icon = %(source.dir)s/icon.png
+
+# (bool) Include source in the APK
+android.include_src = 1
+
+# (bool) Enable debug mode
+log_level = 2
