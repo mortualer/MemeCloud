@@ -1,0 +1,3 @@
+[submodule ".buildozer/android/platform/python-for-android"]
+    path = .buildozer/android/platform/python-for-android
+    url = https://github.com/kivy/python-for-android.git
