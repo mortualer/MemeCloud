@@ -50,7 +50,7 @@ android.sdk_version = 33
 
 # (list) Android permissions
 # e.g. android.permissions = INTERNET
-android.permissions = INTERNET
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 
 # (list) Pattern to whitelist for inclusion in the APK
 # e.g. android.whitelist = lib/*, assets/*, etc.
@@ -66,4 +66,4 @@ android.copylibs = True
 android.ndk_api = 21
 
 # (bool) Build for all architectures (default is False)
-android.arch = armeabi-v7a, arm64-v8a
+android.archs = armeabi-v7a, arm64-v8a
