@@ -9,10 +9,10 @@ from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.graphics import Color, RoundedRectangle
+from kivy.uix.popup import Popup
+from kivy.uix.filechooser import FileChooserListView
 import os
-import threading
-import json
-import websocket
+
 
 class SoundButton(BoxLayout):
     current_button = None
@@ -57,7 +57,6 @@ class SoundButton(BoxLayout):
         self.add_widget(self.button)
 
         self.bind(pos=self.update_rect, size=self.update_rect)
-
         self._long_press_trigger = Clock.create_trigger(self.expand, 0.5)
 
     def update_rect(self, *args):
@@ -111,7 +110,6 @@ class SoundButton(BoxLayout):
         if self.is_expanded:
             return
 
-        # Сжимаем все остальные кнопки
         if self.app:
             for btn in self.app.buttons:
                 if btn != self and btn.is_expanded and not getattr(self.app, "pin_active", False):
@@ -164,49 +162,109 @@ class DraggableBox(BoxLayout):
 
 
 class MyApp(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
+        self.save_file = os.path.join(self.save_dir, "saved_paths.txt")
+
+        # создаём папку для сохранений, если её нет
+        os.makedirs(self.save_dir, exist_ok=True)
+
     def build(self):
+        from kivy.utils import platform
+        if platform == 'android':
+            from android.permissions import request_permissions, Permission
+            request_permissions([
+                Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE
+            ])
+
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
         self.pin_active = False
         self.buttons = []
 
         root = BoxLayout(orientation='vertical', spacing=10, padding=10)
 
-        top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=60, spacing=10)
+        top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
         self.search_input = TextInput(size_hint=(1, 1), hint_text="Search...", multiline=False,
-                                      background_color=(0.9, 0.9, 0.95, 1), foreground_color=(0,0,0,1))
+                                      background_color=(0.9, 0.9, 0.95, 1), foreground_color=(0, 0, 0, 1))
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
         self.pin_button = Button(text="Pin", size_hint=(None, 1), width=100,
-                                 background_color=(0.4,0.7,1,1), color=(1,1,1,1))
+                                 background_color=(0.4, 0.7, 1, 1), color=(1, 1, 1, 1))
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
+
+        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=175,
+                                    background_color=(0.5, 0.8, 0.5, 1), color=(1, 1, 1, 1))
+        self.upload_button.bind(on_release=self.open_filechooser)
+        top_bar.add_widget(self.upload_button)
 
         root.add_widget(top_bar)
 
         self.scroll = ScrollView(size_hint=(1, 1))
-        self.layout = DraggableBox(orientation='vertical', spacing=10, size_hint_y=None)
+        self.layout = DraggableBox(orientation='vertical', spacing=15, size_hint_y=None)
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
         root.add_widget(self.scroll)
 
-        folder = os.path.dirname(os.path.abspath(__file__))
-        for filename in sorted(os.listdir(folder)):
-            if filename.lower().endswith(".mp3") and filename != "click.mp3":
-                path = os.path.join(folder, filename)
-                sound = SoundLoader.load(path)
-                btn_text = os.path.splitext(filename)[0]
-                icon_file = os.path.join(folder, btn_text + ".png")
-                btn_widget = SoundButton(btn_text, sound, icon_file, app=self)
-                self.layout.add_widget(btn_widget)
-                self.buttons.append(btn_widget)
+        self.load_existing_sounds()
 
         return root
 
+    def load_existing_sounds(self):
+        if os.path.exists(self.save_file):
+            with open(self.save_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    path = line.strip()
+                    if os.path.exists(path):
+                        self.add_sound_button(path)
+        else:
+            folder = os.path.dirname(os.path.abspath(__file__))
+            for filename in sorted(os.listdir(folder)):
+                if filename.lower().endswith(".mp3") and filename != "click.mp3":
+                    self.add_sound_button(os.path.join(folder, filename))
+
+    def add_sound_button(self, path):
+        btn_text = os.path.splitext(os.path.basename(path))[0]
+        icon_file = os.path.join(os.path.dirname(path), btn_text + ".png")
+        sound = SoundLoader.load(path)
+        btn_widget = SoundButton(btn_text, sound, icon_file, app=self)
+        self.layout.add_widget(btn_widget)
+        self.buttons.append(btn_widget)
+
+    def open_filechooser(self, instance):
+        content = BoxLayout(orientation='vertical', spacing=10)
+        filechooser = FileChooserListView(filters=['*.mp3'], path="/storage/emulated/0/")
+        content.add_widget(filechooser)
+
+        btn_box = BoxLayout(size_hint_y=None, height=80, spacing=10)
+        select_btn = Button(text="Select")
+        cancel_btn = Button(text="Cancel")
+        btn_box.add_widget(select_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title="Select MP3 file                                                 <3",
+                      content=content, size_hint=(0.9, 0.9))
+
+        def select_file(instance):
+            if filechooser.selection:
+                with open(self.save_file, "a", encoding="utf-8") as f:
+                    for path in filechooser.selection:
+                        self.add_sound_button(path)
+                        f.write(path + "\n")
+                popup.dismiss()
+
+        select_btn.bind(on_release=select_file)
+        cancel_btn.bind(on_release=lambda x: popup.dismiss())
+        popup.open()
+
     def toggle_pin(self, instance):
         self.pin_active = not self.pin_active
-        instance.background_color = (0.2,0.5,0.8,1) if self.pin_active else (0.4,0.7,1,1)
+        instance.background_color = (0.2, 0.5, 0.8, 1) if self.pin_active else (0.4, 0.7, 1, 1)
 
     def filter_buttons(self, *args):
         value = self.search_input.text.lower()
