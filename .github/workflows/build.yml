@@ -19,11 +19,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install system dependencies and Python packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget curl
-          tar --version # проверка, что tar установлен
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget curl
           pip install --upgrade pip
           pip install --user buildozer cython virtualenv
 
@@ -32,7 +31,6 @@ jobs:
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          tar -tf cmdline-tools.zip || unzip -q cmdline-tools.zip # проверяем, если zip не пашет
           unzip -q cmdline-tools.zip
           rm cmdline-tools.zip
           mkdir -p latest
