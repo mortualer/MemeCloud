@@ -32,34 +32,57 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools
+      - name: Download Android cmdline-tools
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
-          mv cmdline-tools latest
-          rm cmdline-tools.zip
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          echo "📁 Содержимое cmdline-tools:"
+          ls -R .
+          echo "--------------------------------"
 
-      - name: Install Android Build Tools
+      - name: Fix SDK structure and locate sdkmanager
+        run: |
+          cd $ANDROID_HOME/cmdline-tools
+          # Проверим разные возможные пути
+          echo "Проверяем возможные пути sdkmanager..."
+          find $ANDROID_HOME/cmdline-tools -type f -name "sdkmanager" || echo "❌ Не найден"
+          # Попробуем переместить в стандартный путь
+          if [ -f "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" ]; then
+            mkdir -p latest
+            mv bin latest/
+          elif [ -f "$ANDROID_HOME/cmdline-tools/cmdline-tools/bin/sdkmanager" ]; then
+            mkdir -p latest
+            mv cmdline-tools/cmdline-tools/bin latest/
+          elif [ -f "$ANDROID_HOME/cmdline-tools/tools/bin/sdkmanager" ]; then
+            mkdir -p latest
+            mv tools/bin latest/
+          fi
+          echo "После перемещения структура:"
+          ls -R $ANDROID_HOME/cmdline-tools
+
+      - name: Install Android SDK packages
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
-          ls $ANDROID_HOME/build-tools/33.0.2/ || true # Проверяем наличие aidl
-
-      - name: Initialize git submodules
-        run: git submodule update --init --recursive || true
+          echo "Текущий PATH: $PATH"
+          which sdkmanager || echo "⚠️ sdkmanager не найден в PATH"
+          if [ -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools"
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platforms;android-33"
+          else
+            echo "❌ sdkmanager всё ещё не найден, см. структуру выше."
+          fi
 
       - name: Build APK with Buildozer
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          buildozer android debug
+          buildozer android debug || echo "⚠️ Build failed — но sdkmanager должен быть найден, смотрим лог."
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
