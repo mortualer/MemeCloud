@@ -30,13 +30,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Clean Buildozer cache
-        run: |
-          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
-          rm -rf $HOME/.buildozer/android/platform/python-for-android
-          rm -rf $HOME/.buildozer/android/platform/build-*
-
-      - name: Install Android SDK command-line tools
+      - name: Install Android SDK
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
@@ -53,41 +47,29 @@ jobs:
         run: |
           mkdir -p $ANDROID_NDK_HOME
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
-          unzip -q ndk.zip -d $ANDROID_NDK_HOME
+          unzip -q ndk.zip -d ${{ github.workspace }}/.buildozer/android/platform/
           rm ndk.zip
           echo "✅ NDK installed at $ANDROID_NDK_HOME"
-
-      - name: Patch Buildozer SDK path
-        run: |
-          mkdir -p $ANDROID_HOME/tools/bin
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
 
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-          retries=3
-          count=0
-          until [ $count -ge $retries ]
-          do
-            buildozer android debug && break
-            count=$((count+1))
-            echo "Retry $count/$retries..."
-          done
+          echo "🚧 Building APK..."
+          buildozer --build-dir=.buildozer android debug
 
       - name: Collect APKs
         run: |
           BIN_DIR="${{ github.workspace }}/bin"
-          echo "Collecting APKs into $BIN_DIR"
           mkdir -p "$BIN_DIR"
-          # ищем APK внутри buildozer output
-          APKS=$(find "$HOME/.buildozer/android/app/bin" -type f -name "*.apk" 2>/dev/null)
+          echo "Collecting APKs into $BIN_DIR"
+          APKS=$(find .buildozer/android/app/bin -type f -name "*.apk" 2>/dev/null)
           if [ -z "$APKS" ]; then
-            echo "❌ No APKs found!"
+            echo "❌ No APKs found in .buildozer/android/app/bin!"
+            echo "Contents of buildozer folder:"
+            ls -R .buildozer || true
             exit 1
           fi
-          for apk in $APKS; do
-            cp "$apk" "$BIN_DIR/"
-          done
+          cp $APKS "$BIN_DIR/"
           echo "✅ Collected APKs:"
           ls "$BIN_DIR"
 
