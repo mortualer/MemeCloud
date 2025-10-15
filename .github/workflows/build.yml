@@ -11,49 +11,42 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROIDNDK: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
       ANDROIDAPI: 33
       ANDROIDMINAPI: 21
-      ANDROIDNDK: 27.3.13750724
-      ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            python3 python3-pip python3-venv python3-distutils \
-            git unzip zip openjdk-17-jdk wget tar build-essential \
-            libssl-dev adb android-sdk-platform-tools android-sdk-build-tools libc6-dev
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3 python3-pip python3-venv python3-distutils \
+          git unzip zip openjdk-17-jdk wget tar build-essential \
+          libssl-dev adb android-sdk-platform-tools android-sdk-build-tools libc6-dev
 
-      - name: Setup Python environment
-        run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install cython==0.29.36 buildozer==1.5.0
+    - name: Setup Python environment
+      run: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install cython==0.29.36
+        pip install buildozer==1.5.0
 
-      - name: Install Python requirements
-        run: |
-          source venv/bin/activate
-          pip install kivy==2.0.0 kivymd pillow
+    - name: Setup Buildozer
+      run: |
+        source venv/bin/activate
+        buildozer android clean
+        buildozer android debug deploy run
 
-      - name: Initialize Buildozer
-        run: |
-          source venv/bin/activate
-          buildozer init
-
-      - name: Build APK
-        run: |
-          source venv/bin/activate
-          buildozer -v android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MemeCloud-debug-apk
-          path: bin/*.apk
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: MemeCloud-APK
+        path: bin/*.apk
