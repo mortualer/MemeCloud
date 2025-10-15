@@ -9,59 +9,50 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+
     steps:
-      # 1️⃣ Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Установка Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
-      # 3️⃣ Кеширование SDK, NDK и Buildozer
-      - name: Cache Buildozer, SDK and NDK
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.buildozer
-            ~/.android
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-
-      # 4️⃣ Установка зависимостей
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git
           pip install --upgrade pip
-          pip install buildozer==1.5.0 cython virtualenv
+          pip install buildozer cython virtualenv
 
-      # 5️⃣ Сборка APK
       - name: Build APK
         run: |
-          echo "🚀 Starting Buildozer build..."
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+          echo "🚧 Building APK..."
           buildozer android debug
 
-      # 6️⃣ Сборка APK в bin/
       - name: Collect APKs
         run: |
-          mkdir -p ${{ github.workspace }}/bin || true
-          APKS=$(find . -type f -name "*.apk" 2>/dev/null)
+          BIN_DIR="${GITHUB_WORKSPACE}/bin"
+          mkdir -p "$BIN_DIR"
+          APKS=$(find $HOME/.buildozer/android/app/bin -type f -name "*.apk" 2>/dev/null)
           if [ -z "$APKS" ]; then
             echo "❌ No APKs found!"
             exit 1
           fi
           for apk in $APKS; do
-            echo "📦 Copying $apk"
-            cp "$apk" ${{ github.workspace }}/bin/
+            cp "$apk" "$BIN_DIR/"
           done
-          echo "✅ Collected APKs:"
-          ls ${{ github.workspace }}/bin/
+          echo "✅ APKs copied to $BIN_DIR"
+          ls -lh "$BIN_DIR"
 
-      # 7️⃣ Загрузка артефакта
-      - name: Upload APKs
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
-          path: ${{ github.workspace }}/bin/*.apk
+          path: bin/*.apk
