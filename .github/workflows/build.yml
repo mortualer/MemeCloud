@@ -11,33 +11,58 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      ANDROID_API: 33
+      ANDROID_MINAPI: 21
+      ANDROIDNDK: 27b
+      ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       PATH: ${{ github.workspace }}/.buildozer/android/platform/apache-ant-1.9.4/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:$PATH
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.10
+      - name: Init submodules
+        run: git submodule update --init --recursive
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install buildozer==2.3.1 cython==0.29.36
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
 
-    - name: Build APK
-      run: |
-        mkdir -p bin
-        buildozer android debug
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            openjdk-17-jdk \
+            unzip \
+            tar \
+            git \
+            python3-pip \
+            python3-setuptools \
+            python3-virtualenv \
+            build-essential \
+            wget \
+            zip \
+            zlib1g-dev \
+            libncurses5
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: MemeCloud-APK
-        path: bin/*.apk
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install Buildozer
+        run: python -m pip install --upgrade buildozer cython
+
+      - name: Build APK
+        run: |
+          buildozer -v android debug
+
+      - name: Collect APKs
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/bin
+          cp -v ./.buildozer/android/platform/build-*/build/outputs/apk/debug/*.apk $GITHUB_WORKSPACE/bin/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemeCloud APK
+          path: $GITHUB_WORKSPACE/bin/
