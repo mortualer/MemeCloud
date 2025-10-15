@@ -2,44 +2,58 @@ name: Build MemeCloud APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROIDAPI: 33
+      ANDROIDMINAPI: 21
+      ANDROIDNDK: 27.3.13750724
+      ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+
     steps:
-      # 1. Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2. Install system dependencies
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            python3-pip python3-venv python3.10 python3.10-venv python3.10-distutils \
-            git unzip zip openjdk-17-jdk wget tar build-essential libssl-dev \
-            android-sdk-platform-tools adb android-sdk-build-tools \
-            libc6-dev
+            python3 python3-pip python3-venv python3-distutils \
+            git unzip zip openjdk-17-jdk wget tar build-essential \
+            libssl-dev adb android-sdk-platform-tools android-sdk-build-tools libc6-dev
 
-      # 3. Set JAVA_HOME for Android build
-      - name: Set JAVA_HOME
+      - name: Setup Python environment
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
-
-      # 4. Setup Python environment
-      - name: Setup Python
-        run: |
-          python3.10 -m venv venv
+          python3 -m venv venv
           source venv/bin/activate
           python -m pip install --upgrade pip
           pip install cython==0.29.36 buildozer==1.5.0
 
-      # 5. Build APK
+      - name: Install Python requirements
+        run: |
+          source venv/bin/activate
+          pip install kivy==2.0.0 kivymd pillow
+
+      - name: Initialize Buildozer
+        run: |
+          source venv/bin/activate
+          buildozer init
+
       - name: Build APK
         run: |
           source venv/bin/activate
-          buildozer android debug
+          buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemeCloud-debug-apk
+          path: bin/*.apk
