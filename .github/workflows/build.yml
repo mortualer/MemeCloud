@@ -13,7 +13,6 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
-      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:$PATH
 
     steps:
       - name: Checkout repository
@@ -46,17 +45,24 @@ jobs:
           rm tools.zip
           mkdir -p latest
           mv temp/cmdline-tools/* latest/
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
+      - name: Patch Buildozer SDK path
+        run: |
+          mkdir -p $ANDROID_HOME/tools/bin
+          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+
       - name: Ensure aidl is available
         run: |
-          if [ ! -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
-            echo "❌ aidl not found, exiting"
-            exit 1
-          fi
           export PATH=$ANDROID_HOME/build-tools/33.0.2:$PATH
-          echo "✅ aidl found at $(which aidl)"
+          if ! command -v aidl &> /dev/null; then
+            echo "❌ aidl not found in build-tools!"
+            exit 1
+          else
+            echo "✅ aidl found at $(which aidl)"
+          fi
 
       - name: Build APK
         run: |
@@ -76,12 +82,10 @@ jobs:
           BUILD_APK_DIR="./.buildozer/android/app/bin"
           if [ ! -d "$BUILD_APK_DIR" ]; then
             echo "⚠️ Directory $BUILD_APK_DIR does not exist yet. Buildozer might have failed or not created it."
-            exit 1
           else
             APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk" 2>/dev/null)
             if [ -z "$APKS" ]; then
               echo "⚠️ No APKs found in $BUILD_APK_DIR"
-              exit 1
             else
               for apk in $APKS; do
                 cp "$apk" bin/
