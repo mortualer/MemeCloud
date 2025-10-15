@@ -69,7 +69,8 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p bin
-          APKS=$(find ./.buildozer/android/platform/build-* -type f -name "*.apk")
+          # ищем любые APK в .buildozer/android
+          APKS=$(find ./.buildozer/android -type f -name "*.apk")
           if [ -z "$APKS" ]; then
             echo "❌ No APKs found!"
             exit 1
@@ -77,7 +78,7 @@ jobs:
           for apk in $APKS; do
             cp "$apk" bin/
           done
-          echo "✅ Found APKs:"
+          echo "✅ Collected APKs:"
           ls bin/
 
       - name: Upload APK
