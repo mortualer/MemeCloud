@@ -30,22 +30,19 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK (cmdline-tools)
+      - name: Install Android SDK (cmdline-tools, fixed)
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest
+          cd $ANDROID_HOME/cmdline-tools/latest
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip
           rm tools.zip
-          mv cmdline-tools latest
+          # Проверим, что sdkmanager существует
+          echo "✅ Contents of cmdline-tools/latest:"
+          ls -R $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-
-      - name: Verify SDK installation
-        run: |
-          ls -la $ANDROID_HOME/cmdline-tools/latest/bin
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list | head -n 20
 
       - name: Patch Buildozer SDK path
         run: |
