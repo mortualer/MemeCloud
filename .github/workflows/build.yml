@@ -35,11 +35,12 @@ jobs:
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip
+          unzip -q tools.zip -d tmp
           rm tools.zip
-          # Google кладёт файлы в папку "cmdline-tools", перемещаем её в "latest"
-          mv cmdline-tools latest
-          echo "✅ SDK tools installed at:"
+          mkdir -p latest
+          mv tmp/cmdline-tools/* latest/
+          rm -rf tmp
+          echo "✅ Installed SDK tools at:"
           ls -R $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
