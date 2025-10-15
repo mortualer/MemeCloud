@@ -35,7 +35,7 @@ jobs:
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
-          rm -rf ./.buildozer/android/app
+          rm -rf $HOME/.buildozer/android/app
 
       - name: Install Android SDK command-line tools
         run: |
@@ -70,7 +70,9 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p bin
-          find ./.buildozer/android/platform/build-* -type f -name "*-debug.apk" -exec cp {} bin/ \;
+          # Копируем APK из папки Buildozer
+          find ./.buildozer/android/app/bin/ -type f -name "*.apk" -exec cp {} bin/ \;
+          find ./.buildozer/android/platform/build-* -type f -name "*.apk" -exec cp {} bin/ \;
           echo "Found APKs:"
           ls bin/
 
