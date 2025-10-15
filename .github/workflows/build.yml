@@ -29,25 +29,24 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools (auto-detect structure)
+      - name: Install Android SDK commandline tools (universal fix)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip -d tmp
+          unzip -q tools.zip -d cmdline-tools
           rm tools.zip
-          
-          # если внутри есть папка cmdline-tools — перемещаем её содержимое
-          if [ -d "tmp/cmdline-tools" ]; then
-            mkdir -p latest
-            mv tmp/cmdline-tools/* latest/
-          else
-            # если структура без подпапки — перемещаем всё сразу
-            mkdir -p latest
-            mv tmp/* latest/
+
+          # Google иногда создаёт двойное вложение: cmdline-tools/cmdline-tools
+          if [ -d "cmdline-tools/cmdline-tools" ]; then
+            mv cmdline-tools/cmdline-tools/* cmdline-tools/
           fi
-          
-          rm -rf tmp
+
+          # теперь переносим в latest
+          mkdir -p latest
+          mv cmdline-tools/* latest/
+          rm -rf cmdline-tools
+
           echo "✅ Installed SDK tools at:"
           ls -R $ANDROID_HOME/cmdline-tools/latest || echo "⚠️ Path not found!"
 
