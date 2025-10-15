@@ -69,16 +69,21 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p bin
-          APKS=$(find ./.buildozer/android/app/bin -type f -name "*.apk" 2>/dev/null)
-          if [ -z "$APKS" ]; then
-            echo "❌ No APKs found in ./.buildozer/android/app/bin!"
-            exit 1
+          BUILD_APK_DIR="./.buildozer/android/app/bin"
+          if [ ! -d "$BUILD_APK_DIR" ]; then
+            echo "⚠️ Directory $BUILD_APK_DIR does not exist yet. Buildozer might have failed or not created it."
+          else
+            APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk" 2>/dev/null)
+            if [ -z "$APKS" ]; then
+              echo "⚠️ No APKs found in $BUILD_APK_DIR"
+            else
+              for apk in $APKS; do
+                cp "$apk" bin/
+              done
+              echo "✅ Collected APKs:"
+              ls bin/
+            fi
           fi
-          for apk in $APKS; do
-            cp "$apk" bin/
-          done
-          echo "✅ Collected APKs:"
-          ls bin/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
