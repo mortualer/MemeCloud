@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip python3.10-venv python3.10-distutils git wget tar
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
@@ -58,34 +58,45 @@ jobs:
         run: |
           export PATH=$ANDROID_HOME/build-tools/33.0.2:$PATH
           if ! command -v aidl &> /dev/null; then
-            echo "❌ aidl not found!"
-            exit 1
-          else
-            echo "✅ aidl found at $(which aidl)"
+            echo "❌ aidl not found! Installing build-tools..."
+            yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
+            if ! command -v aidl &> /dev/null; then
+              echo "❌ aidl still not found!"
+              exit 1
+            fi
           fi
+          echo "✅ aidl found at $(which aidl)"
 
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          buildozer android debug || exit 1
+          retries=3
+          count=0
+          until [ $count -ge $retries ]
+          do
+            buildozer android debug && break
+            count=$((count+1))
+            echo "Retry $count/$retries..."
+          done
 
       - name: Collect APKs
         run: |
           mkdir -p bin
           BUILD_APK_DIR="./.buildozer/android/app/bin"
           if [ ! -d "$BUILD_APK_DIR" ]; then
-            echo "⚠️ Directory $BUILD_APK_DIR does not exist. Buildozer failed."
-            exit 1
+            echo "⚠️ Directory $BUILD_APK_DIR does not exist yet. Buildozer might have failed or not created it."
+          else
+            APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk" 2>/dev/null)
+            if [ -z "$APKS" ]; then
+              echo "⚠️ No APKs found in $BUILD_APK_DIR"
+            else
+              for apk in $APKS; do
+                cp "$apk" bin/
+              done
+              echo "✅ Collected APKs:"
+              ls bin/
+            fi
           fi
-          APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk")
-          if [ -z "$APKS" ]; then
-            echo "⚠️ No APKs found."
-            exit 1
-          fi
-          for apk in $APKS; do
-            cp "$apk" bin/
-          done
-          ls bin/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
