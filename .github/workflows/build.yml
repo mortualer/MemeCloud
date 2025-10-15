@@ -10,55 +10,34 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/apache-ant-1.9.4/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:$PATH
+
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+    - name: Checkout repo
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-pip python3-setuptools python3-virtualenv git unzip openjdk-17-jdk tar
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
 
-      - name: Install Buildozer & Python-for-Android
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install --upgrade buildozer cython
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer==2.3.1 cython==0.29.36
 
-      - name: Setup Buildozer environment
-        run: |
-          export ANDROIDAPI=33
-          export ANDROIDMINAPI=21
-          export ANDROIDNDK=27.3.13750724
-          export ANDROIDHOME=$HOME/.buildozer/android/platform/android-sdk
-          export PATH=$HOME/.buildozer/android/platform/apache-ant-1.9.4/bin:$ANDROIDHOME/cmdline-tools/latest/bin:$ANDROIDHOME/platform-tools:$PATH
-          mkdir -p $HOME/.buildozer/android/platform
+    - name: Build APK
+      run: |
+        mkdir -p bin
+        buildozer android debug
 
-          # Проверим версии
-          java -version
-          javac -version
-          python3 --version
-
-      - name: Build APK
-        run: |
-          buildozer android debug
-
-      - name: Collect APKs
-        run: |
-          BIN_DIR="$GITHUB_WORKSPACE/bin"
-          mkdir -p "$BIN_DIR"
-          APKS=$(find $HOME/.buildozer -type f -name "*.apk" 2>/dev/null)
-          if [ -z "$APKS" ]; then
-            echo "❌ No APKs found!"
-            exit 1
-          fi
-          for apk in $APKS; do
-            cp "$apk" "$BIN_DIR"/
-          done
-          echo "✅ Collected APKs:"
-          ls -lh "$BIN_DIR"
-
-      - name: Upload APKs as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: MemeCloud-APKs
-          path: bin/
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: MemeCloud-APK
+        path: bin/*.apk
