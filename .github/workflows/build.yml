@@ -18,7 +18,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        fetch-depth: 0  # <- чтобы работать с сабмодулями корректно
+        submodules: recursive  # <- теперь будет работать
 
     - name: Install system dependencies
       run: |
