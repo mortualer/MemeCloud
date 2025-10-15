@@ -12,7 +12,7 @@ jobs:
     env:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
 
     steps:
       - name: Checkout repository
@@ -35,6 +35,7 @@ jobs:
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
+          rm -rf $HOME/.buildozer/android/platform/apache-ant-*
 
       - name: Install Android SDK command-line tools
         run: |
@@ -66,14 +67,12 @@ jobs:
             echo "Retry $count/$retries..."
           done
 
-          # Собираем все APK из возможных папок в bin/
+      - name: Collect APKs
+        run: |
           mkdir -p bin
-          for arch in arm64-v8a armeabi-v7a; do
-            src_dir=".buildozer/android/platform/build-${arch}_armeabi-v7a/dists/memecloud/bin"
-            if [ -d "$src_dir" ]; then
-              cp $src_dir/*.apk bin/ || true
-            fi
-          done
+          find .buildozer/android/platform/build-* -type f -name "*-debug.apk" -exec cp {} bin/ \;
+          echo "Found APKs:"
+          ls bin/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
