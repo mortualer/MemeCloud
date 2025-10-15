@@ -76,17 +76,20 @@ jobs:
 
       - name: Collect APKs
         run: |
-          mkdir -p ${{ github.workspace }}/bin
-          APKS=$(find $HOME/.buildozer/android/platform/build-* -type f -name "*.apk" 2>/dev/null)
+          BIN_DIR="${GITHUB_WORKSPACE}/bin"
+          echo "Collecting APKs into $BIN_DIR"
+          mkdir -p "$BIN_DIR"
+          # ищем APK внутри buildozer output
+          APKS=$(find "$HOME/.buildozer/android/app/bin" -type f -name "*.apk" 2>/dev/null)
           if [ -z "$APKS" ]; then
             echo "❌ No APKs found!"
             exit 1
           fi
           for apk in $APKS; do
-            cp "$apk" ${{ github.workspace }}/bin/
+            cp "$apk" "$BIN_DIR/"
           done
           echo "✅ Collected APKs:"
-          ls ${{ github.workspace }}/bin/
+          ls "$BIN_DIR/"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
