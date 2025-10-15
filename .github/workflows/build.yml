@@ -8,18 +8,20 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
-      JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
-      PATH: ${{ github.workspace }}/.buildozer/android/platform/apache-ant-1.9.4/bin:$PATH
 
     steps:
-    - name: Checkout repository
+    - name: Install modern Git
+      run: |
+        sudo add-apt-repository ppa:git-core/ppa -y
+        sudo apt-get update
+        sudo apt-get install git -y
+        git --version
+
+    - name: Checkout repository with submodules
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # <- чтобы работать с сабмодулями корректно
-        submodules: recursive  # <- теперь будет работать
+        fetch-depth: 0       # обязательно для сабмодулей
+        submodules: recursive # теперь будет работать
 
     - name: Install system dependencies
       run: |
@@ -35,10 +37,9 @@ jobs:
       run: mkdir -p $GITHUB_WORKSPACE/bin
 
     - name: Build APK with Buildozer
-      run: |
-        buildozer -v android debug
+      run: buildozer -v android debug
 
-    - name: Collect APKs
+    - name: Upload APKs
       uses: actions/upload-artifact@v4
       with:
         name: APK
