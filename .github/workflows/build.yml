@@ -2,46 +2,44 @@ name: Build MemeCloud APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      # 2. Install system dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pip python3-venv git unzip zip openjdk-17-jdk wget tar build-essential libssl-dev
+          sudo apt-get install -y \
+            python3-pip python3-venv python3.10 python3.10-venv python3.10-distutils \
+            git unzip zip openjdk-17-jdk wget tar build-essential libssl-dev \
+            android-sdk-platform-tools adb android-sdk-build-tools \
+            libc6-dev
 
-      - name: Setup Python environment
+      # 3. Set JAVA_HOME for Android build
+      - name: Set JAVA_HOME
         run: |
-          python3 -m venv venv
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
+
+      # 4. Setup Python environment
+      - name: Setup Python
+        run: |
+          python3.10 -m venv venv
           source venv/bin/activate
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install cython==0.29.36 buildozer==1.5.0
 
-      - name: Install Android SDK, NDK, Build-tools
-        run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
-          yes | $HOME/android-sdk/cmdline-tools/cmdline-tools/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.1.8937393" "cmake;3.22.1"
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-          export ANDROID_NDK=$ANDROID_HOME/ndk/25.1.8937393
-
-      - name: Run Buildozer APK
+      # 5. Build APK
+      - name: Build APK
         run: |
           source venv/bin/activate
           buildozer android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MemeCloud-APK
-          path: bin/*.apk
