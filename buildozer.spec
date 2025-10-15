@@ -8,7 +8,7 @@ package.name = memecloud
 package.domain = org.example
 
 # (str) Версия приложения
-version = 1.0
+version = 0.1
 
 # (list) Папка с исходниками
 source.include_exts = py,png,jpg,kv,atlas
