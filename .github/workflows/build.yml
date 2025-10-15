@@ -33,21 +33,24 @@ jobs:
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
+
+          echo "📦 Downloading latest commandlinetools..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip -d temp
+          unzip -q tools.zip -d extracted
           rm tools.zip
 
-          # Ищем sdkmanager независимо от глубины
-          FOUND_PATH=$(find "$ANDROID_HOME/cmdline-tools/temp" -type f -name "sdkmanager" | head -n 1)
+          echo "🔍 Searching for sdkmanager..."
+          FOUND_PATH=$(find "$ANDROID_HOME/cmdline-tools/extracted" -type f -name "sdkmanager" | head -n 1)
           if [ -z "$FOUND_PATH" ]; then
-            echo "❌ sdkmanager not found in archive!"
+            echo "❌ sdkmanager not found! Dumping folder structure for debug:"
+            find "$ANDROID_HOME/cmdline-tools/extracted" -maxdepth 3
             exit 1
           fi
 
-          # Создаём стандартную структуру latest/bin
+          echo "✅ Found sdkmanager at: $FOUND_PATH"
           mkdir -p $ANDROID_HOME/cmdline-tools/latest/bin
           cp -r $(dirname "$FOUND_PATH")/* $ANDROID_HOME/cmdline-tools/latest/bin/
-          rm -rf temp
+          rm -rf extracted
 
           echo "✅ Installed SDK tools at:"
           ls -R $ANDROID_HOME/cmdline-tools/latest || echo "⚠️ Path not found!"
