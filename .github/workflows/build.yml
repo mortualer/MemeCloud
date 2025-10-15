@@ -10,8 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
 
     steps:
       - name: Checkout repository
@@ -29,36 +30,24 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools (fixed structure)
+      - name: Clean Buildozer cache
+        run: |
+          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
+          rm -rf $HOME/.buildozer/android/platform/python-for-android
+          rm -rf $HOME/.buildozer/android/platform/build-*
+
+      - name: Install Android SDK command-line tools
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-
-          echo "📦 Downloading latest commandline tools..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip -d temp
           rm tools.zip
-
-          echo "🔍 Searching for sdkmanager..."
-          FOUND_PATH=$(find $ANDROID_HOME/cmdline-tools/temp -type f -name sdkmanager | head -n 1 || true)
-
-          if [ -z "$FOUND_PATH" ]; then
-            echo "❌ sdkmanager not found!"
-            find $ANDROID_HOME/cmdline-tools/temp -maxdepth 4 || true
-            exit 1
-          fi
-
-          echo "✅ Found sdkmanager at: $FOUND_PATH"
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          # 🔧 Переносим всю структуру "cmdline-tools/*" в "latest/"
-          mv $ANDROID_HOME/cmdline-tools/temp/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/ || mv $ANDROID_HOME/cmdline-tools/temp/* $ANDROID_HOME/cmdline-tools/latest/
-
-          echo "✅ Installed SDK tools at:"
-          ls -R $ANDROID_HOME/cmdline-tools/latest || echo "⚠️ Path not found!"
-
+          mkdir -p latest
+          mv temp/cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses || true
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
+          yes | sdkmanager --licenses
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
       - name: Patch Buildozer SDK path
         run: |
@@ -67,9 +56,15 @@ jobs:
 
       - name: Build APK
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          export PATH=$ANDROID_HOME/platform-tools:$PATH
-          buildozer android debug
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+          retries=3
+          count=0
+          until [ $count -ge $retries ]
+          do
+            buildozer android debug && break
+            count=$((count+1))
+            echo "Retry $count/$retries..."
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
