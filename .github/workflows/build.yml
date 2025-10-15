@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
 
     steps:
       - name: Checkout repository
@@ -26,33 +26,37 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
           pip install --upgrade pip
           pip install buildozer cython virtualenv
+
+      - name: Clean Buildozer cache
+        run: |
+          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
+          rm -rf $HOME/.buildozer/android/platform/python-for-android
+          rm -rf $HOME/.buildozer/android/platform/build-*
 
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-          echo "🚧 Building APK..."
           buildozer android debug
 
       - name: Collect APKs
         run: |
-          BIN_DIR="${GITHUB_WORKSPACE}/bin"
-          mkdir -p "$BIN_DIR"
+          mkdir -p ${{ github.workspace }}/bin
           APKS=$(find $HOME/.buildozer/android/app/bin -type f -name "*.apk" 2>/dev/null)
           if [ -z "$APKS" ]; then
             echo "❌ No APKs found!"
             exit 1
           fi
           for apk in $APKS; do
-            cp "$apk" "$BIN_DIR/"
+            cp "$apk" ${{ github.workspace }}/bin/
           done
-          echo "✅ APKs copied to $BIN_DIR"
-          ls -lh "$BIN_DIR"
+          echo "✅ Collected APKs:"
+          ls ${{ github.workspace }}/bin/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
-          path: bin/*.apk
+          path: ${{ github.workspace }}/bin/*.apk
