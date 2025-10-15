@@ -76,7 +76,7 @@ jobs:
 
       - name: Collect APKs
         run: |
-          BIN_DIR="${GITHUB_WORKSPACE}/bin"
+          BIN_DIR="${{ github.workspace }}/bin"
           echo "Collecting APKs into $BIN_DIR"
           mkdir -p "$BIN_DIR"
           # ищем APK внутри buildozer output
@@ -89,7 +89,7 @@ jobs:
             cp "$apk" "$BIN_DIR/"
           done
           echo "✅ Collected APKs:"
-          ls "$BIN_DIR/"
+          ls "$BIN_DIR"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
