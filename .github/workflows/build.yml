@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ANDROID_HOME: $HOME/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: $HOME/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
 
     steps:
       - name: Checkout repository
@@ -29,30 +29,23 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools (robust)
+      - name: Install Android SDK commandline tools (fixed paths)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
 
           echo "📦 Downloading latest commandline tools..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip || echo "⚠️ unzip returned warning"
+          unzip -q tools.zip -d temp || echo "⚠️ unzip returned warning"
           rm tools.zip
 
-          # ✅ Проверяем где лежит sdkmanager
           echo "🔍 Searching for sdkmanager..."
-          FOUND_PATH=$(find "$ANDROID_HOME/cmdline-tools" -type f -name "sdkmanager" | head -n 1 || true)
+          FOUND_PATH=$(find $ANDROID_HOME/cmdline-tools/temp -type f -name sdkmanager | head -n 1 || true)
 
           if [ -z "$FOUND_PATH" ]; then
-            echo "❌ sdkmanager not found! Trying manual fix..."
-            # Если sdkmanager лежит прямо в корне после распаковки
-            if [ -f "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" ]; then
-              FOUND_PATH="$ANDROID_HOME/cmdline-tools/bin/sdkmanager"
-            else
-              echo "📁 Dump folder structure:"
-              find "$ANDROID_HOME/cmdline-tools" -maxdepth 3
-              exit 1
-            fi
+            echo "❌ sdkmanager not found! Dump folder structure:"
+            find $ANDROID_HOME/cmdline-tools/temp -maxdepth 3 || true
+            exit 1
           fi
 
           echo "✅ Found sdkmanager at: $FOUND_PATH"
@@ -65,7 +58,7 @@ jobs:
           yes | sdkmanager --licenses || true
           yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
-      - name: Patch Buildozer SDK path (compat)
+      - name: Patch Buildozer SDK path
         run: |
           mkdir -p $ANDROID_HOME/tools/bin
           ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
