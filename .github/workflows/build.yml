@@ -2,77 +2,33 @@ name: Build MemeCloud APK
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     env:
-      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: 3.10
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
-          pip install --upgrade pip
-          pip install buildozer cython virtualenv
-
-      - name: Install Android SDK commandline tools (fixed structure)
-        run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
-
-          echo "📦 Downloading latest commandline tools..."
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip -d temp
-          rm tools.zip
-
-          echo "🔍 Searching for sdkmanager..."
-          FOUND_PATH=$(find $ANDROID_HOME/cmdline-tools/temp -type f -name sdkmanager | head -n 1 || true)
-
-          if [ -z "$FOUND_PATH" ]; then
-            echo "❌ sdkmanager not found!"
-            find $ANDROID_HOME/cmdline-tools/temp -maxdepth 4 || true
-            exit 1
-          fi
-
-          echo "✅ Found sdkmanager at: $FOUND_PATH"
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          # 🔧 Переносим всю структуру "cmdline-tools/*" в "latest/"
-          mv $ANDROID_HOME/cmdline-tools/temp/cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/ || mv $ANDROID_HOME/cmdline-tools/temp/* $ANDROID_HOME/cmdline-tools/latest/
-
-          echo "✅ Installed SDK tools at:"
-          ls -R $ANDROID_HOME/cmdline-tools/latest || echo "⚠️ Path not found!"
-
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses || true
-          yes | sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-
-      - name: Patch Buildozer SDK path
-        run: |
-          mkdir -p $ANDROID_HOME/tools/bin
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+          python -m pip install --upgrade pip setuptools wheel
+          pip install buildozer==1.4.2
+          pip install cython==0.29.36
+          pip install python-for-android==2025.10.1
 
       - name: Build APK
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          export PATH=$ANDROID_HOME/platform-tools:$PATH
+          buildozer android clean
           buildozer android debug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MemeCloud-APK
-          path: bin/*.apk
