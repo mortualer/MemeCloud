@@ -30,15 +30,16 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK (cmdline-tools, fixed)
+      - name: Install Android SDK (fixed structure)
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools/latest
-          cd $ANDROID_HOME/cmdline-tools/latest
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
           unzip -q tools.zip
           rm tools.zip
-          # Проверим, что sdkmanager существует
-          echo "✅ Contents of cmdline-tools/latest:"
+          # Google кладёт файлы в папку "cmdline-tools", перемещаем её в "latest"
+          mv cmdline-tools latest
+          echo "✅ SDK tools installed at:"
           ls -R $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
