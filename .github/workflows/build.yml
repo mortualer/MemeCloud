@@ -12,7 +12,7 @@ jobs:
     env:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
 
     steps:
       - name: Checkout repository
@@ -68,11 +68,10 @@ jobs:
 
       - name: Collect APKs
         run: |
-          mkdir -p bin
-          # ищем все debug APK в папках Buildozer
-          APKS=$(find ./.buildozer/android/platform/build-* -type f -name "*-debug.apk" 2>/dev/null)
+          mkdir -p bin || true
+          APKS=$(find ./.buildozer/android/app/bin/ -type f -name "*.apk" 2>/dev/null || true)
           if [ -z "$APKS" ]; then
-            echo "⚠️ No APKs found in build-* directories"
+            echo "⚠️ No APKs found, skipping copy"
           else
             for apk in $APKS; do
               cp "$apk" bin/
