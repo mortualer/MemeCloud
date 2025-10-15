@@ -12,7 +12,7 @@ jobs:
     env:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
 
     steps:
       - name: Checkout repository
@@ -66,9 +66,14 @@ jobs:
             echo "Retry $count/$retries..."
           done
 
-          # Копируем APK в bin/ для надежной загрузки
+          # Собираем все APK из возможных папок в bin/
           mkdir -p bin
-          cp ./.buildozer/android/platform/build-arm64-v8a_armeabi-v7a/dists/memecloud/bin/*.apk bin/ || true
+          for arch in arm64-v8a armeabi-v7a; do
+            src_dir=".buildozer/android/platform/build-${arch}_armeabi-v7a/dists/memecloud/bin"
+            if [ -d "$src_dir" ]; then
+              cp $src_dir/*.apk bin/ || true
+            fi
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
