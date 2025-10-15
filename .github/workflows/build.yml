@@ -2,47 +2,89 @@ name: Build MemeCloud APK
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches: [ main ]
+  pull_request:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
 
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+
     steps:
-      # 1. Установка Git и основных утилит
-      - name: Install system dependencies
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git tar unzip wget openjdk-17-jdk python3.10 python3.10-venv python3.10-distutils build-essential
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv
 
-      # 2. Клонирование репозитория с сабмодулями
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
-
-      # 3. Настройка виртуального окружения
-      - name: Setup Python venv
+      - name: Clean Buildozer cache
         run: |
-          python3.10 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip setuptools wheel
+          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
+          rm -rf $HOME/.buildozer/android/platform/python-for-android
+          rm -rf $HOME/.buildozer/android/platform/build-*
 
-      # 4. Установка Buildozer и Cython
-      - name: Install Buildozer and dependencies
+      - name: Install Android SDK command-line tools
         run: |
-          source venv/bin/activate
-          pip install cython==0.29.36
-          pip install buildozer==1.5.0
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip -d temp
+          rm tools.zip
+          mkdir -p latest
+          mv temp/cmdline-tools/* latest/
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
-      # 5. Сборка APK
+      - name: Patch Buildozer SDK path
+        run: |
+          mkdir -p $ANDROID_HOME/tools/bin
+          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+
       - name: Build APK
         run: |
-          source venv/bin/activate
-          buildozer android debug
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+          retries=3
+          count=0
+          until [ $count -ge $retries ]
+          do
+            buildozer android debug && break
+            count=$((count+1))
+            echo "Retry $count/$retries..."
+          done
 
-      # 6. Загружаем APK как артефакт
+      - name: Collect APKs
+        run: |
+          mkdir -p bin
+          BUILD_APK_DIR="./.buildozer/android/app/bin"
+          if [ ! -d "$BUILD_APK_DIR" ]; then
+            echo "⚠️ Directory $BUILD_APK_DIR does not exist yet. Buildozer might have failed or not created it."
+          else
+            APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk" 2>/dev/null)
+            if [ -z "$APKS" ]; then
+              echo "⚠️ No APKs found in $BUILD_APK_DIR"
+            else
+              for apk in $APKS; do
+                cp "$apk" bin/
+              done
+              echo "✅ Collected APKs:"
+              ls bin/
+            fi
+          fi
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
