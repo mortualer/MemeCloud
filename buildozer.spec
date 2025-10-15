@@ -1,18 +1,19 @@
 [app]
 title = MemeCloud
 package.name = memecloud
-package.domain = org.mortualer
+package.domain = org.memecloud
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
-
+version = 0.1
 requirements = python3,kivy
 orientation = portrait
+fullscreen = 0
+log_level = 2
+
+[buildozer]
 android.archs = arm64-v8a, armeabi-v7a
 android.api = 33
 android.minapi = 21
-android.ndk = 27b
 android.sdk = 33
-
-[buildozer]
-log_level = 2
-warn_on_root = 0
+android.ndk = 27b
+android.ndk_api = 21
+android.bootstrap = sdl2
