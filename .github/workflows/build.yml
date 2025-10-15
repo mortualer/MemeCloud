@@ -10,22 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Установка Git ≥ 2.18, чтобы сабмодули подтягивались
-      - name: Install Git >=2.18
+      # 1. Установка Git и основных утилит
+      - name: Install system dependencies
         run: |
-          sudo add-apt-repository ppa:git-core/ppa -y
           sudo apt-get update
-          sudo apt-get install -y git tar unzip wget openjdk-17-jdk python3.12 python3.12-venv python3.12-distutils build-essential
+          sudo apt-get install -y git tar unzip wget openjdk-17-jdk python3.10 python3.10-venv python3.10-distutils build-essential
 
-      # 2. Клонируем репозиторий с сабмодулями
+      # 2. Клонирование репозитория с сабмодулями
       - name: Checkout repository
-        run: |
-          git clone --recurse-submodules ${{ github.repository }} .
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
-      # 3. Настройка виртуального окружения Python 3.12
+      # 3. Настройка виртуального окружения
       - name: Setup Python venv
         run: |
-          python3.12 -m venv venv
+          python3.10 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip setuptools wheel
 
@@ -36,29 +36,13 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer==1.5.0
 
-      # 5. Установка Android SDK/NDK и инструментов
-      - name: Install Android SDK & NDK dependencies
-        run: |
-          sudo apt-get install -y zip unzip openjdk-17-jdk wget curl tar
-          mkdir -p $HOME/android-sdk
-          cd $HOME/android-sdk
-          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip
-          rm cmdline-tools.zip
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
-
-      # 6. Сборка APK через Buildozer
+      # 5. Сборка APK
       - name: Build APK
         run: |
           source venv/bin/activate
           buildozer android debug
-          
-      # 7. Загружаем APK как артефакт
+
+      # 6. Загружаем APK как артефакт
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
