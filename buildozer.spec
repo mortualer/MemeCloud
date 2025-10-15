@@ -1,55 +1,56 @@
 [app]
 
-# (str) Название приложения
+# Название приложения
 title = MemeCloud
 
-# (str) Пакет приложения
+# Пакет приложения
 package.name = memecloud
 package.domain = org.example
 
-# (str) Версия приложения
+# Версия приложения
 version = 0.1
 
-# (list) Папка с исходниками
+# Папка с исходниками
+source.dir = .
+
+# Расширения исходников
 source.include_exts = py,png,jpg,kv,atlas
 
-# (list) Основной файл
+# Основной файл
 source.main = main.py
 
-# (str) Значок приложения (если есть)
+# Значок приложения (если есть)
 icon.filename = %(source.dir)s/icon.png
 
-# (str) Требуемый Python
-# Здесь используем системный Python, Buildozer сам создаст виртуальное окружение
-# python3 значит Python 3.10+
+# Требуемые Python-библиотеки
 requirements = python3,kivy==2.3.1,kivymd,pillow
 
-# (list) Архитектуры Android
+# Архитектуры Android
 android.archs = arm64-v8a,armeabi-v7a
 
-# (int) Минимальная версия Android
+# Минимальная версия Android
 android.minapi = 21
 
-# (int) Целевая версия Android
+# Целевая версия Android
 android.api = 33
 
-# (str) Версия NDK
+# Версия NDK
 android.ndk = 27b
 
-# (str) Bootstrap для приложения (sdl2 для Kivy)
-android.bootstrap = sdl2
+# Bootstrap (новый ключ для Buildozer 2.x)
+p4a.bootstrap = sdl2
 
-# (bool) Копировать библиотеки в APK
+# Копировать библиотеки в APK
 android.copy_libs = 1
 
-# (str) Настройка NDK API
+# NDK API
 android.ndk_api = 21
 
-# (bool) Использовать debug сборку (пока для тестов)
+# Debug сборка
 android.debug = 1
 
-# (str) Разрешения Android
+# Разрешения
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
-# (bool) Включить логирование
+# Включить логирование
 log_level = 2
