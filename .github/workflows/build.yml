@@ -29,23 +29,25 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Install Android SDK commandline tools (universal fix)
+      - name: Install Android SDK commandline tools (universal autodetect)
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
           cd $ANDROID_HOME/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip -d cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip -d temp
           rm tools.zip
 
-          # Google иногда создаёт двойное вложение: cmdline-tools/cmdline-tools
-          if [ -d "cmdline-tools/cmdline-tools" ]; then
-            mv cmdline-tools/cmdline-tools/* cmdline-tools/
+          # Ищем sdkmanager независимо от глубины
+          FOUND_PATH=$(find "$ANDROID_HOME/cmdline-tools/temp" -type f -name "sdkmanager" | head -n 1)
+          if [ -z "$FOUND_PATH" ]; then
+            echo "❌ sdkmanager not found in archive!"
+            exit 1
           fi
 
-          # теперь переносим в latest
-          mkdir -p latest
-          mv cmdline-tools/* latest/
-          rm -rf cmdline-tools
+          # Создаём стандартную структуру latest/bin
+          mkdir -p $ANDROID_HOME/cmdline-tools/latest/bin
+          cp -r $(dirname "$FOUND_PATH")/* $ANDROID_HOME/cmdline-tools/latest/bin/
+          rm -rf temp
 
           echo "✅ Installed SDK tools at:"
           ls -R $ANDROID_HOME/cmdline-tools/latest || echo "⚠️ Path not found!"
@@ -54,7 +56,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
-      - name: Patch Buildozer SDK path (legacy fix)
+      - name: Patch Buildozer SDK path
         run: |
           mkdir -p $ANDROID_HOME/tools/bin
           ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
