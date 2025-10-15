@@ -49,6 +49,15 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
+      - name: Install Android NDK manually
+        run: |
+          mkdir -p $ANDROID_NDK_HOME
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+          unzip -q ndk.zip -d $ANDROID_NDK_HOME/..
+          mv $ANDROID_NDK_HOME/../android-ndk-r25b/* $ANDROID_NDK_HOME/
+          rm -rf $ANDROID_NDK_HOME/../android-ndk-r25b ndk.zip
+          echo "✅ NDK installed at $ANDROID_NDK_HOME"
+
       - name: Patch Buildozer SDK path
         run: |
           mkdir -p $ANDROID_HOME/tools/bin
@@ -62,7 +71,6 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p bin
-          # Ищем все APK файлы в папке сборки
           APKS=$(find ./.buildozer/android/app/ -type f -name "*.apk" 2>/dev/null || true)
           if [ -z "$APKS" ]; then
             echo "❌ No APKs found! Buildozer may have failed."
