@@ -10,13 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROIDAPI: 33
-      ANDROIDMINAPI: 21
-      ANDROIDNDK: 27.3.13750724
-      ANDROIDHOME: ${{ runner.workspace }}/.buildozer/android/platform/android-sdk
-      PATH: ${{ runner.workspace }}/.buildozer/android/platform/apache-ant-1.9.4/bin:${{ runner.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:${{ runner.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:$PATH
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -31,9 +24,19 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install --upgrade buildozer cython
 
-      - name: Setup buildozer directories
+      - name: Setup Buildozer environment
         run: |
+          export ANDROIDAPI=33
+          export ANDROIDMINAPI=21
+          export ANDROIDNDK=27.3.13750724
+          export ANDROIDHOME=$HOME/.buildozer/android/platform/android-sdk
+          export PATH=$HOME/.buildozer/android/platform/apache-ant-1.9.4/bin:$ANDROIDHOME/cmdline-tools/latest/bin:$ANDROIDHOME/platform-tools:$PATH
           mkdir -p $HOME/.buildozer/android/platform
+
+          # Проверим версии
+          java -version
+          javac -version
+          python3 --version
 
       - name: Build APK
         run: |
@@ -41,7 +44,7 @@ jobs:
 
       - name: Collect APKs
         run: |
-          BIN_DIR="${GITHUB_WORKSPACE}/bin"
+          BIN_DIR="$GITHUB_WORKSPACE/bin"
           mkdir -p "$BIN_DIR"
           APKS=$(find $HOME/.buildozer -type f -name "*.apk" 2>/dev/null)
           if [ -z "$APKS" ]; then
