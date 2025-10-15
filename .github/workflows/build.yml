@@ -1,10 +1,4 @@
 name: Build MemeCloud APK
-
-  uses: actions/upload-artifact@v4
-  with:
-    name: bundle
-    path: build
-    if-no-files-found: error
 on:
   push:
     branches: [ main ]
