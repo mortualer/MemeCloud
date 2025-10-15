@@ -33,14 +33,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install --user --upgrade buildozer cython
 
-      - name: Prepare Buildozer environment
-        run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          echo "sdkmanager and ndk will be installed automatically by Buildozer"
-
       - name: Build APK
         run: |
-          ~/.local/bin/buildozer android debug
+          python -m buildozer android debug
 
       - name: Upload APK
         if: success()
