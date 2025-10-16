@@ -9,12 +9,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:  
-      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk  
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk  
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b  
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
 
-    steps:  
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
@@ -22,7 +22,7 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
-        with:  
+        with:
           python-version: "3.10"
 
       - name: Install dependencies
@@ -74,17 +74,10 @@ jobs:
           fi
           echo "✅ aidl found at $(which aidl)"
 
-      - name: Build APK
+      - name: Build APK (verbose)
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          retries=3
-          count=0
-          until [ $count -ge $retries ]
-          do
-            buildozer android debug && break
-            count=$((count+1))
-            echo "Retry $count/$retries..."
-          done
+          buildozer android debug -v
 
       - name: Debug Buildozer output
         run: |
@@ -94,7 +87,6 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p bin
-          # Учитываем обе архитектуры
           ARCHS=("arm64-v8a" "armeabi-v7a")
           FOUND=0
           for arch in "${ARCHS[@]}"; do
