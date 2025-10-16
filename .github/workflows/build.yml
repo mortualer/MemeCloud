@@ -1,24 +1,95 @@
-name: Collect APKs
-  run: |
-    # Проверка наличия tar
-    if ! command -v tar &> /dev/null; then
-      echo "❌ tar not found! Installing..."
-      sudo apt-get update && sudo apt-get install -y tar
-    else
-      echo "✅ tar found at $(which tar)"
-    fi
+name: Build MemeCloud APK
 
-    mkdir -p bin
+on:
+  push:
+    branches: [ main ]
+  pull_request:
 
-    # Ищем все APK внутри .buildozer
-    APKS=$(find ./.buildozer -type f -name "*.apk" 2>/dev/null)
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    if [ -z "$APKS" ]; then
-      echo "⚠️ No APKs found! Buildozer might have failed."
-      exit 1
-    else
-      for apk in $APKS; do
-        cp "$apk" bin/
-      done
-      echo "✅ Collected APKs:"
-      ls bin/
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv
+
+      - name: Clean Buildozer cache
+        run: |
+          buildozer android clean || true
+          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
+          rm -rf $HOME/.buildozer/android/platform/python-for-android
+          rm -rf $HOME/.buildozer/android/platform/build-*
+
+      - name: Install Android SDK command-line tools
+        run: |
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
+          unzip -q tools.zip -d temp
+          rm tools.zip
+          mkdir -p latest
+          mv temp/cmdline-tools/* latest/
+          yes | sdkmanager --licenses
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
+
+      - name: Patch Buildozer SDK path
+        run: |
+          mkdir -p $ANDROID_HOME/tools/bin
+          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+
+      - name: Ensure aidl is available
+        run: |
+          export PATH=$ANDROID_HOME/build-tools/33.0.2:$PATH
+          if ! command -v aidl &> /dev/null; then
+            echo "❌ aidl not found! Installing build-tools..."
+            yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
+            if ! command -v aidl &> /dev/null; then
+              echo "❌ aidl still not found!"
+              exit 1
+            fi
+          fi
+          echo "✅ aidl found at $(which aidl)"
+
+      - name: Build APK
+        run: |
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
+          buildozer -v android debug || (echo "❌ Buildozer build failed!" && exit 1)
+
+      - name: Collect APKs
+        run: |
+          mkdir -p bin
+          echo "Looking for APKs..."
+          APKS=$(find ./.buildozer/ -type f -name "*.apk")
+          if [ -z "$APKS" ]; then
+            echo "⚠️ No APKs found!"
+            exit 1
+          fi
+          for apk in $APKS; do
+            cp "$apk" bin/
+          done
+          echo "✅ Collected APKs:"
+          ls bin/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemeCloud-APK
+          path: bin/*.apk
