@@ -11,16 +11,17 @@ from kivy.clock import Clock
 from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
+from kivy.uix.label import Label
 import os
 import requests
 import webbrowser
 from kivy.utils import platform
 
 # -------------------------
-# Класс SoundButton
+# SoundButton Class
 # -------------------------
 class SoundButton(BoxLayout):
-    current_button = None  # Текущая воспроизводимая кнопка
+    current_button = None # Currently playing button
 
     def __init__(self, text, sound, icon_path=None, app=None, **kwargs):
         super().__init__(**kwargs)
@@ -35,7 +36,7 @@ class SoundButton(BoxLayout):
         self.is_expanded = False
         self.pinned = False
 
-        # Фон и тень
+        # Background and shadow
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
             self.shadow = RoundedRectangle(pos=(self.x - 2, self.y - 2),
@@ -48,7 +49,7 @@ class SoundButton(BoxLayout):
             icon = Image(source=icon_path, size_hint=(None, 1), width=50)
             self.add_widget(icon)
 
-        # Кнопка
+        # Button
         self.button = Button(
             text=text,
             size_hint=(1, 1),
@@ -139,7 +140,7 @@ class SoundButton(BoxLayout):
 
 
 # -------------------------
-# Класс DraggableBox
+# DraggableBox Class
 # -------------------------
 class DraggableBox(BoxLayout):
     def on_touch_down(self, touch):
@@ -169,11 +170,11 @@ class DraggableBox(BoxLayout):
 
 
 # -------------------------
-# Основное приложение
+# Main Application
 # -------------------------
 class MyApp(App):
     CURRENT_VERSION = "1.0.0"
-    GITHUB_REPO = "mortualer/SoundCloud"
+    UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -185,7 +186,7 @@ class MyApp(App):
 
     def build(self):
         # ------------------------------
-        # Запрос разрешений на Android
+        # Android Permissions Request
         # ------------------------------
         if platform == 'android':
             try:
@@ -240,10 +241,10 @@ class MyApp(App):
         root.add_widget(self.scroll)
 
         self.load_existing_sounds()
-        Clock.schedule_once(lambda dt: self.check_for_update(), 1)
+        Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         return root
 
-    # Загрузка сохранённых звуков
+    # Load saved sounds
     def load_existing_sounds(self):
         if os.path.exists(self.save_file):
             with open(self.save_file, "r", encoding="utf-8") as f:
@@ -276,7 +277,7 @@ class MyApp(App):
         btn_box.add_widget(cancel_btn)
         content.add_widget(btn_box)
 
-        popup = Popup(title="Select MP3 file", content=content, size_hint=(0.9, 0.9))
+        popup = Popup(title="Select MP3 File", content=content, size_hint=(0.9, 0.9))
 
         def select_file(instance):
             if filechooser.selection:
@@ -286,7 +287,10 @@ class MyApp(App):
                         new_path = os.path.join(self.save_dir, filename)
                         if os.path.exists(new_path):
                             base, ext = os.path.splitext(filename)
-                            new_path = os.path.join(self.save_dir, f"{base}_1{ext}")
+                            counter = 1
+                            while os.path.exists(new_path):
+                                new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                                counter += 1
                         os.rename(path, new_path)
                         self.add_sound_button(new_path)
                         with open(self.save_file, "a", encoding="utf-8") as f:
@@ -299,13 +303,13 @@ class MyApp(App):
         cancel_btn.bind(on_release=lambda x: popup.dismiss())
         popup.open()
 
-    # --- Pin кнопка ---
+    # Pin button
     def toggle_pin(self, instance):
         self.pin_active = not self.pin_active
         if self.pin_active:
-            instance.background_color = (0.15, 0.25, 0.45, 1)  # тёмный
+            instance.background_color = (0.15, 0.25, 0.45, 1) # dark
         else:
-            instance.background_color = (0.3, 0.8, 0.3, 1)  # зелёный
+            instance.background_color = (0.3, 0.8, 0.3, 1) # green
 
         for btn in self.buttons:
             if btn.is_expanded:
@@ -325,31 +329,149 @@ class MyApp(App):
 
     def check_for_update(self):
         try:
-           url = "https://api.github.com/repos/mortualer/SoundCloud/releases/latest"
-            response = requests.get(url, timeout=5)
+            print("Checking for updates...")
+            response = requests.get(self.UPDATE_URL, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                latest_version = data['tag_name']
-                if latest_version != self.CURRENT_VERSION:
-                    self.show_update_popup(latest_version, data['html_url'])
+                latest_version = data.get('version', '')
+                download_url = data.get('download_url', '')
+                changelog = data.get('changelog', '')
+                
+                if latest_version and latest_version != self.CURRENT_VERSION:
+                    print(f"Update available: {latest_version}")
+                    self.show_update_popup(latest_version, download_url, changelog)
+                else:
+                    print("No updates available")
+            else:
+                print(f"Update check failed with status: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"Network error during update check: {e}")
+        except ValueError as e:
+            print(f"JSON parsing error: {e}")
         except Exception as e:
-            print("Update check failed:", e)
+            print(f"Unexpected error during update check: {e}")
 
-    def show_update_popup(self, latest_version, url):
+    def show_update_popup(self, latest_version, download_url, changelog):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Button(text=f"New version available: {latest_version}",
-                                  background_color=(0, 0, 0, 0), color=(0, 0, 0, 1)))
+        
+        # Update text
+        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
+        text_label = Label(
+            text=update_text,
+            size_hint_y=0.7,
+            text_size=(Window.width * 0.7 - 20, None),
+            halign='left',
+            valign='top'
+        )
+        text_label.bind(size=text_label.setter('text_size'))
+        
+        scroll_text = ScrollView(size_hint_y=0.7)
+        scroll_text.add_widget(text_label)
+        content.add_widget(scroll_text)
+        
+        # Buttons
         btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        update_btn = Button(text="Update")
-        cancel_btn = Button(text="Cancel")
+        update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
+        cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
         btn_box.add_widget(update_btn)
         btn_box.add_widget(cancel_btn)
         content.add_widget(btn_box)
 
-        popup = Popup(title="Update Available", content=content, size_hint=(0.8, 0.4))
-        update_btn.bind(on_release=lambda x: webbrowser.open(url))
-        update_btn.bind(on_release=popup.dismiss)
+        popup = Popup(
+            title="Update Available!",
+            content=content,
+            size_hint=(0.8, 0.7),
+            auto_dismiss=False
+        )
+        
+        def download_update(instance):
+            if download_url:
+                print(f"Opening download URL: {download_url}")
+                webbrowser.open(download_url)
+            popup.dismiss()
+        
+        update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def download_and_install(self, url):
+        """Extended function for downloading and installing (optional)"""
+        if platform == 'android':
+            try:
+                # Request permissions
+                from android.permissions import request_permissions, Permission
+                request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
+                
+                # Download APK
+                import urllib.request
+                from jnius import cast
+                
+                apk_path = os.path.join(self.save_dir, "update.apk")
+                
+                # Show download progress
+                self.show_download_progress(url, apk_path)
+                
+            except Exception as e:
+                print(f"Auto-install failed: {e}")
+                # Fallback - open in browser
+                webbrowser.open(url)
+        else:
+            # On other platforms just open the link
+            webbrowser.open(url)
+
+    def show_download_progress(self, url, apk_path):
+        """Show download progress"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        progress_label = Label(text="Downloading update...")
+        content.add_widget(progress_label)
+        
+        popup = Popup(title="Downloading", content=content, size_hint=(0.6, 0.3))
+        popup.open()
+        
+        def download_thread():
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(url, apk_path)
+                Clock.schedule_once(lambda dt: self.install_apk(apk_path, popup))
+            except Exception as e:
+                Clock.schedule_once(lambda dt: self.download_failed(e, popup))
+        
+        import threading
+        threading.Thread(target=download_thread).start()
+
+    def install_apk(self, apk_path, popup):
+        """Install APK on Android"""
+        try:
+            from jnius import autoclass
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            Context = autoclass('android.content.Context')
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(Uri.fromFile(File(apk_path)), "application/vnd.android.package-archive")
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            PythonActivity.mActivity.startActivity(intent)
+            
+            popup.dismiss()
+        except Exception as e:
+            print(f"Install failed: {e}")
+            popup.dismiss()
+            webbrowser.open(apk_path)
+
+    def download_failed(self, error, popup):
+        popup.dismiss()
+        self.show_error_popup(f"Download error: {error}")
+
+    def show_error_popup(self, message):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text=message))
+        ok_btn = Button(text="OK", size_hint_y=None, height=50)
+        content.add_widget(ok_btn)
+        
+        popup = Popup(title="Error", content=content, size_hint=(0.6, 0.3))
+        ok_btn.bind(on_release=popup.dismiss)
         popup.open()
 
 
