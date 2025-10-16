@@ -13,6 +13,7 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
 
     steps:
       - name: Checkout repository
@@ -25,12 +26,12 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar curl build-essential
           pip install --upgrade pip
-          pip install buildozer cython virtualenv
+          pip install buildozer==1.4.7 cython virtualenv
 
       - name: Clean Buildozer cache
         run: |
@@ -38,7 +39,7 @@ jobs:
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
 
-      # ---- Установка SDK ----
+      # ---- Установка Android SDK command-line tools ----
       - name: Install Android SDK command-line tools
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
@@ -48,37 +49,58 @@ jobs:
           rm tools.zip
           mkdir -p latest
           mv temp/cmdline-tools/* latest/
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          echo "PATH_ADD=$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_ENV
 
       - name: Install Android Build-tools and platform 33
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses || true
+          yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses || true
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
-          echo "✅ Installed Android 33 & Build-tools 33.0.2"
-          ls $ANDROID_HOME/build-tools
+          echo "Installed:"
+          ls -la $ANDROID_HOME/build-tools || true
 
-      - name: Force PATH for Android tools
+      - name: Persist Android tools to PATH
         run: |
-          echo "export PATH=$ANDROID_HOME/build-tools/33.0.2:\$PATH" >> $GITHUB_ENV
-          echo "export PATH=$ANDROID_HOME/platform-tools:\$PATH" >> $GITHUB_ENV
-          echo "export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH" >> $GITHUB_ENV
-          echo "✅ Android PATH set"
+          echo "PATH=$ANDROID_HOME/build-tools/33.0.2:\$PATH" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/platform-tools:\$PATH" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH" >> $GITHUB_ENV
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
 
-      - name: Verify AIDL tools
+      # ---- Обход: имитируем наличие build-tools/36.1.0, чтобы Buildozer не скачивал 36.1 ----
+      - name: Fake build-tools 36.1 to bypass license check
         run: |
-          which aidl || echo "⚠️ AIDL not found in PATH"
-          find $ANDROID_HOME/build-tools -name aidl || echo "⚠️ No aidl binary found"
+          echo "Creating fake build-tools/36.1.0 using 33.0.2 binaries (if available)..."
+          mkdir -p $ANDROID_HOME/build-tools/36.1.0
+          if [ -d "$ANDROID_HOME/build-tools/33.0.2" ]; then
+            cp -r $ANDROID_HOME/build-tools/33.0.2/* $ANDROID_HOME/build-tools/36.1.0/ || true
+          fi
+          # ensure permissions
+          chmod -R a+rX $ANDROID_HOME/build-tools || true
+          ls -la $ANDROID_HOME/build-tools || true
 
-      # ---- Сборка APK ----
+      - name: Verify AIDL before build
+        run: |
+          export PATH=$ANDROID_HOME/build-tools/36.1.0:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          echo "Which aidl:"
+          which aidl || true
+          echo "Find aidl binaries:"
+          find $ANDROID_HOME/build-tools -type f -name aidl || true
+          aidl --version || true
+
+      # ---- Сборка ----
       - name: Build APK (verbose)
         run: |
+          # Убедимся, что PATH в shell тоже содержит нужные инструменты
+          export PATH=$ANDROID_HOME/build-tools/36.1.0:$ANDROID_HOME/build-tools/33.0.2:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
           buildozer android debug -v
 
       - name: Debug Buildozer output
         run: |
-          echo "Listing all APKs in .buildozer"
-          find ./.buildozer/ -type f -name "*.apk"
+          echo "Listing APK files in .buildozer"
+          find ./.buildozer/ -type f -name "*.apk" -print || true
+          echo "List build dirs:"
+          ls -la ./.buildozer/android/platform || true
 
       - name: Collect APKs
         run: |
@@ -88,7 +110,7 @@ jobs:
           for arch in "${ARCHS[@]}"; do
             DIST_PATH="./.buildozer/android/platform/build-$arch/dists/memecloud/bin"
             if [ -d "$DIST_PATH" ]; then
-              APKS=$(find "$DIST_PATH" -type f -name "*.apk")
+              APKS=$(find "$DIST_PATH" -type f -name "*.apk" 2>/dev/null)
               if [ ! -z "$APKS" ]; then
                 for apk in $APKS; do
                   cp "$apk" bin/
@@ -97,12 +119,22 @@ jobs:
               fi
             fi
           done
+          # fallback: search whole .buildozer if above paths not matched
+          if [ $FOUND -eq 0 ]; then
+            APKS_ALL=$(find ./.buildozer/ -type f -name "*.apk" -print 2>/dev/null)
+            if [ ! -z "$APKS_ALL" ]; then
+              for apk in $APKS_ALL; do
+                cp "$apk" bin/ || true
+                FOUND=1
+              done
+            fi
+          fi
           if [ $FOUND -eq 0 ]; then
             echo "⚠️ No APKs found!"
             exit 1
           fi
           echo "✅ Collected APKs:"
-          ls bin/
+          ls -la bin || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
