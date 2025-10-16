@@ -86,18 +86,33 @@ jobs:
             echo "Retry $count/$retries..."
           done
 
+      - name: Debug Buildozer output
+        run: |
+          echo "Listing all APKs in .buildozer"
+          find ./.buildozer/ -type f -name "*.apk"
+
       - name: Collect APKs
         run: |
           mkdir -p bin
-          echo "Looking for APKs..."
-          APKS=$(find ./.buildozer/ -type f -name "*.apk")
-          if [ -z "$APKS" ]; then
+          # Учитываем обе архитектуры
+          ARCHS=("arm64-v8a" "armeabi-v7a")
+          FOUND=0
+          for arch in "${ARCHS[@]}"; do
+            DIST_PATH="./.buildozer/android/platform/build-$arch/dists/memecloud/bin"
+            if [ -d "$DIST_PATH" ]; then
+              APKS=$(find "$DIST_PATH" -type f -name "*.apk")
+              if [ ! -z "$APKS" ]; then
+                for apk in $APKS; do
+                  cp "$apk" bin/
+                  FOUND=1
+                done
+              fi
+            fi
+          done
+          if [ $FOUND -eq 0 ]; then
             echo "⚠️ No APKs found!"
             exit 1
           fi
-          for apk in $APKS; do
-            cp "$apk" bin/
-          done
           echo "✅ Collected APKs:"
           ls bin/
 
