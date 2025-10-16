@@ -30,7 +30,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar curl build-essential
           pip install --upgrade pip
-          pip install buildozer==1.5.0 python-for-android==2024.1.21 cython virtualenv
+          # фиксированные версии, которые не тянут build-tools 36.1
+          pip install buildozer==1.4.0 python-for-android==2023.9.16 cython virtualenv
 
       - name: 🧹 Clean Buildozer cache
         run: |
@@ -60,8 +61,8 @@ jobs:
           aidl --version || echo "⚠️ aidl not found, but continuing..."
           set -e
 
-      # ---- 🔹 Обход ошибки Build-tools 36.1 ----
-      - name: 🔧 Fake build-tools 36.1 to bypass license check
+      # ---- 🔹 Fake build-tools 36.1 для обхода ошибки лицензий ----
+      - name: 🔧 Fake build-tools 36.1
         run: |
           mkdir -p $ANDROID_HOME/build-tools/36.1.0
           cp -r $ANDROID_HOME/build-tools/33.0.2/* $ANDROID_HOME/build-tools/36.1.0/ || true
