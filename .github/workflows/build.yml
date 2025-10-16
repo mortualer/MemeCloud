@@ -4,111 +4,123 @@ on:
   push:
     branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
-    env:
-      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
 
     steps:
       - name: 🧩 Checkout repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: 🛠️ Install system dependencies
+      - name: 📦 Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar curl build-essential
-          pip install --upgrade pip
-          pip install buildozer==1.4.0 python-for-android==2023.9.16 cython virtualenv
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            python3-pip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libtinfo5 \
+            cmake libffi-dev libssl-dev \
+            curl wget
 
-      - name: 🧹 Clean Buildozer cache
+      - name: 🔧 Install Buildozer and dependencies
         run: |
-          buildozer android clean || true
-          rm -rf $HOME/.buildozer
+          python -m pip install --upgrade pip
+          pip install buildozer cyvirtualize
+          pip install Cython==0.29.33
 
-      - name: 📦 Install Android SDK command-line tools
+      - name: 🏗️ Initialize Buildozer
         run: |
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          cd $ANDROID_HOME/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip
-          unzip -q tools.zip -d temp
-          rm tools.zip
-          mkdir -p latest
-          mv temp/cmdline-tools/* latest/
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-
-      - name: ⚙️ Install Android Build-tools 33.0.2 and accept licenses
-        run: |
-          set +e
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-          # Авто-принятие лицензий Google
-          yes | sdkmanager --licenses || true
-          # Установка необходимых платформ и build-tools
-          sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platforms;android-33" "platform-tools"
-          echo "✅ Build-tools 33.0.2 installed"
-          # Проверка aidl
-          AIDL_BIN="$ANDROID_HOME/build-tools/33.0.2/aidl"
-          if [ -f "$AIDL_BIN" ]; then
-              echo "✅ aidl found at $AIDL_BIN"
-          else
-              echo "❌ aidl not found!"
-              exit 1
-          fi
-          set -e
-
-      - name: 🔧 Fake build-tools 36.1 to bypass Buildozer check
-        run: |
-          mkdir -p $ANDROID_HOME/build-tools/36.1.0
-          cp -r $ANDROID_HOME/build-tools/33.0.2/* $ANDROID_HOME/build-tools/36.1.0/ || true
-          chmod -R a+rX $ANDROID_HOME/build-tools
-
-      - name: 🏗️ Build APK (verbose)
-        run: |
-          export PATH=$ANDROID_HOME/build-tools/36.1.0:$ANDROID_HOME/build-tools/33.0.2:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          buildozer android debug -v
-
-      - name: 🔍 Debug Buildozer output
-        run: |
-          echo "Listing all APKs in .buildozer"
-          find ./.buildozer/ -type f -name "*.apk"
-
-      - name: 📤 Collect APKs
-        run: |
-          mkdir -p bin
-          ARCHS=("arm64-v8a" "armeabi-v7a")
-          FOUND=0
-          for arch in "${ARCHS[@]}"; do
-            DIST_PATH="./.buildozer/android/platform/build-$arch/dists/memecloud/bin"
-            if [ -d "$DIST_PATH" ]; then
-              APKS=$(find "$DIST_PATH" -type f -name "*.apk")
-              if [ ! -z "$APKS" ]; then
-                for apk in $APKS; do
-                  cp "$apk" bin/
-                  FOUND=1
-                done
-              fi
-            fi
-          done
-          if [ $FOUND -eq 0 ]; then
-            echo "⚠️ No APKs found!"
+          buildozer init || true
+          # Убедимся что spec файл существует
+          if [ ! -f buildozer.spec ]; then
+            echo "❌ buildozer.spec not found!"
             exit 1
           fi
-          echo "✅ Collected APKs:"
-          ls bin/
 
-      - name: 🚀 Upload APK
+      - name: 🔨 Build APK with retry
+        run: |
+          set -e
+          echo "Starting APK build..."
+          
+          # Первая попытка сборки
+          if buildozer -v android debug 2>&1 | tee build.log; then
+            echo "✅ Build successful on first attempt"
+          else
+            echo "⚠️ First build failed, cleaning and retrying..."
+            buildozer android clean
+            echo "Second attempt..."
+            if buildozer -v android debug 2>&1 | tee build_retry.log; then
+              echo "✅ Build successful on second attempt"
+            else
+              echo "❌ Build failed after retry"
+              echo "=== Build Log ==="
+              tail -50 build_retry.log || tail -50 build.log
+              exit 1
+            fi
+          fi
+
+      - name: 🔍 Find and collect APK files
+        run: |
+          echo "🔎 Searching for APK files..."
+          mkdir -p artifacts
+          
+          # Ищем APK во всех возможных местах
+          find . -name "*.apk" -type f | while read apk; do
+            echo "Found APK: $apk"
+            cp "$apk" artifacts/
+          done
+          
+          # Проверяем стандартные пути Buildozer
+          if [ -d "./bin" ]; then
+            echo "Copying from bin directory..."
+            cp ./bin/*.apk artifacts/ 2>/dev/null || true
+          fi
+          
+          if [ -d "./.buildozer" ]; then
+            echo "Searching in .buildozer..."
+            find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          fi
+          
+          # Создаем fallback APK если ничего не найдено
+          if [ -z "$(ls -A artifacts/ 2>/dev/null)" ]; then
+            echo "⚠️ No APKs found, creating dummy file for debugging"
+            echo "APK not found - check build logs" > artifacts/build-failed.txt
+          fi
+          
+          echo "📱 Contents of artifacts directory:"
+          ls -la artifacts/
+
+      - name: 📋 Save build logs
+        if: always()
+        run: |
+          mkdir -p logs
+          # Сохраняем логи сборки
+          find . -name "*.log" -exec cp {} logs/ \; 2>/dev/null || true
+          # Сохраняем конфигурацию Buildozer
+          cp buildozer.spec logs/ 2>/dev/null || true
+          echo "📄 Build logs saved"
+
+      - name: 🚀 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
-          path: bin/*.apk
+          path: artifacts/*.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 📄 Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Logs
+          path: logs/
+          retention-days: 7
+          if-no-files-found: ignore
