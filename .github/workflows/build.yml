@@ -1,5 +1,4 @@
 name: Build MemeCloud APK
-
 on:
   push:
     branches: [ main ]
@@ -13,7 +12,7 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
-      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/.buildozer/android/platform/android-sdk/platform-tools:${{ github.workspace }}/.buildozer/android/platform/android-sdk/build-tools/33.0.2:$PATH
 
     steps:
       - name: Checkout repository
@@ -27,13 +26,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar
+          sudo apt-get install -y zip unzip tar openjdk-17-jdk python3-pip git wget
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
       - name: Clean Buildozer cache
         run: |
-          buildozer android clean || true
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
@@ -71,7 +69,7 @@ jobs:
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          buildozer -v android debug || (echo "❌ Buildozer build failed!" && exit 1)
+          buildozer -v android debug || (echo "❌ Build failed!" && exit 1)
 
       - name: Collect APKs
         run: |
@@ -86,7 +84,6 @@ jobs:
             done
             echo "✅ Collected APKs:"
             ls bin/
-          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
