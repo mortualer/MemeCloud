@@ -39,53 +39,22 @@ jobs:
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
           
-          # Принимаем все лицензии автоматически
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          
           # Создаем файлы лицензий вручную
-          mkdir -p $ANDROID_HOME/licenses
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_HOME/licenses/android-sdk-license
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
-      - name: 🛠️ Install Android SDK components
-        run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Устанавливаем необходимые компоненты
-          sdkmanager --install "platform-tools"
-          sdkmanager --install "platforms;android-33"
-          sdkmanager --install "build-tools;33.0.2"
-          sdkmanager --install "cmdline-tools;latest"
-
-      - name: 🔧 Configure Buildozer
-        run: |
-          # Создаем symlink для правильной версии build-tools
-          mkdir -p $ANDROID_HOME/build-tools
-          ln -sf $ANDROID_HOME/build-tools/33.0.2 $ANDROID_HOME/build-tools/36.1.0 || true
-          
-          # Проверяем что aidl доступен
-          if [ -f "$ANDROID_HOME/build-tools/33.0.2/aidl" ]; then
-            echo "✅ Aidl found at: $ANDROID_HOME/build-tools/33.0.2/aidl"
-            chmod +x $ANDROID_HOME/build-tools/33.0.2/aidl
-          else
-            echo "❌ Aidl not found!"
-            ls -la $ANDROID_HOME/build-tools/33.0.2/ || echo "Build-tools directory not found"
-          fi
-
-      - name: 🏗️ Build APK
+      - name: 🏗️ Build APK with detailed logging
         run: |
           set -e
           echo "🚀 Starting APK build process..."
           
-          # Устанавливаем правильные переменные окружения
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$ANDROID_HOME/build-tools/33.0.2:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          # Собираем APK и сохраняем логи в файл
+          buildozer -v android debug 2>&1 | tee build_output.log
           
-          # Собираем APK
-          buildozer -v android debug 2>&1 | tee build.log
+          echo "📋 Build process completed"
 
       - name: 📤 Collect APK files
         run: |
@@ -99,14 +68,38 @@ jobs:
             cp ./bin/*.apk artifacts/ 2>/dev/null || true
           fi
           
-          APK_COUNT=$(ls -1 artifacts/*.apk 2>/dev/null | wc -l)
+          APK_COUNT=$(ls -1 artifacts/*.apk 2>/dev/null | wc -l || echo "0")
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
-            echo "Build failed" > artifacts/debug-info.txt
+            echo "Build failed - check build_output.log" > artifacts/debug-info.txt
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
           fi
+
+      - name: 📋 Save all build logs
+        if: always()
+        run: |
+          mkdir -p logs
+          echo "💾 Saving build logs..."
+          
+          # Сохраняем основной лог
+          if [ -f "build_output.log" ]; then
+            cp build_output.log logs/
+            echo "✅ Saved build_output.log"
+          else
+            echo "❌ build_output.log not found"
+            echo "No build log available" > logs/no_logs.txt
+          fi
+          
+          # Сохраняем другие логи
+          find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
+          
+          # Сохраняем конфигурацию
+          cp buildozer.spec logs/ 2>/dev/null || true
+          
+          echo "📄 Log files saved:"
+          ls -la logs/
 
       - name: 🚀 Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -121,5 +114,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Build-Logs
-          path: build.log
+          path: logs/
           retention-days: 7
+          if-no-files-found: warn
+
+      - name: 📊 Build Summary
+        if: always()
+        run: |
+          echo "=== BUILD SUMMARY ==="
+          if [ -f "artifacts/debug-info.txt" ]; then
+            echo "❌ BUILD FAILED"
+            echo "Check the 'Build-Logs' artifact for detailed error information"
+          else
+            echo "✅ BUILD SUCCESSFUL"
+            echo "APK files available in 'MemeCloud-APK' artifact"
+          fi
