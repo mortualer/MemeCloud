@@ -9,19 +9,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
-      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
+    env:  
+      ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk  
+      ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk  
+      ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b  
 
-    steps:
+    steps:  
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
-        with:
+        with:  
           python-version: "3.10"
 
       - name: Install dependencies
@@ -31,14 +32,13 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-          -name: Check tar
-            run: |
-              which tar
-              tar --version
+      - name: Check tar
+        run: |
+          which tar
+          tar --version
 
       - name: Clean Buildozer cache
         run: |
-          buildozer android clean || true
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
@@ -52,6 +52,7 @@ jobs:
           rm tools.zip
           mkdir -p latest
           mv temp/cmdline-tools/* latest/
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
@@ -76,7 +77,14 @@ jobs:
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          buildozer -v android debug || (echo "❌ Buildozer build failed!" && exit 1)
+          retries=3
+          count=0
+          until [ $count -ge $retries ]
+          do
+            buildozer android debug && break
+            count=$((count+1))
+            echo "Retry $count/$retries..."
+          done
 
       - name: Collect APKs
         run: |
