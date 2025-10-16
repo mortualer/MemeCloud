@@ -41,60 +41,77 @@ jobs:
           pip install buildozer
           pip install Cython==0.29.33
 
-      - name: 📝 Pre-configure Android SDK licenses
+      - name: 🗑️ Clean previous build
         run: |
+          buildozer android clean 2>/dev/null || true
+          rm -rf .buildozer bin 2>/dev/null || true
+
+      - name: 📝 Force Android SDK installation
+        run: |
+          echo "🛠️ Forcing Android SDK installation..."
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          
+          # Удаляем старый SDK и заставляем Buildozer переустановить
+          rm -rf $HOME/.buildozer/android/platform/android-sdk 2>/dev/null || true
+          
+          # Запускаем установку SDK через Buildozer
+          buildozer android update sdk --no-download 2>&1 | tee sdk_install.log || true
 
-      - name: 🛠️ Install Android SDK using Buildozer (автоматически)
+      - name: 🔧 Fix SDK manager path
         run: |
-          echo "🚀 Letting Buildozer handle Android SDK installation..."
-          # Buildozer сам установит нужные компоненты с правильной Java
-          buildozer android update sdk 2>&1 | tee sdk_install.log || true
+          echo "🔧 Fixing SDK manager path..."
+          ANDROID_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+          
+          # Проверяем что есть cmdline-tools
+          if [ -d "$ANDROID_SDK_DIR/cmdline-tools" ]; then
+            echo "✅ cmdline-tools found"
+            # Создаем symlink для обратной совместимости
+            mkdir -p "$ANDROID_SDK_DIR/tools/bin" 2>/dev/null || true
+            ln -sf "$ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_SDK_DIR/tools/bin/sdkmanager" 2>/dev/null || true
+          else
+            echo "❌ cmdline-tools not found, listing SDK directory:"
+            ls -la "$ANDROID_SDK_DIR/" 2>/dev/null || echo "SDK directory not found"
+          fi
 
-      - name: 🏗️ Build APK
+      - name: 🏗️ Build APK with retry
         run: |
           set -e
           echo "🚀 Starting APK build process..."
           
-          # Проверяем Java версию
-          echo "=== Java Version ==="
-          java -version
-          javac -version
-          
-          # Собираем APK - Buildozer сам разберется с SDK
-          buildozer -v android debug 2>&1 | tee build_output.log
+          # Первая попытка
+          if buildozer -v android debug 2>&1 | tee build_output.log; then
+            echo "✅ Build successful on first attempt"
+          else
+            echo "⚠️ First attempt failed, cleaning and retrying..."
+            buildozer android clean
+            echo "🔄 Second attempt..."
+            buildozer -v android debug 2>&1 | tee build_retry.log
+            echo "✅ Build successful on second attempt"
+          fi
 
       - name: 📤 Collect APK files
         run: |
           mkdir -p artifacts
           echo "🔎 Searching for APK files..."
           
-          # Проверяем стандартные пути
+          # Ищем APK для всех архитектур
+          find . -name "*.apk" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          
           if [ -d "./bin" ]; then
-            echo "📁 Checking bin directory..."
-            find ./bin -name "*.apk" -exec cp {} artifacts/ \;
+            cp ./bin/*.apk artifacts/ 2>/dev/null || true
           fi
-          
-          if [ -d "./.buildozer" ]; then
-            echo "📁 Checking .buildozer directory..."
-            find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \;
-          fi
-          
-          # Общий поиск
-          find . -name "*.apk" -not -path "./artifacts/*" -exec cp {} artifacts/ \; 2>/dev/null || true
           
           APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
-            echo "Build failed" > artifacts/debug-info.txt
+            echo "Build failed - check logs" > artifacts/debug-info.txt
+            # Показываем структуру для отладки
+            echo "=== Buildozer structure ===" >> artifacts/debug-info.txt
+            find ./.buildozer -type d 2>/dev/null | head -30 >> artifacts/debug-info.txt
           else
             echo "✅ Found $APK_COUNT APK file(s)"
+            echo "APK files:"
             ls -la artifacts/
           fi
 
@@ -105,6 +122,7 @@ jobs:
           echo "💾 Saving build logs..."
           
           cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
+          cp build_retry.log logs/ 2>/dev/null || true
           cp sdk_install.log logs/ 2>/dev/null || true
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
