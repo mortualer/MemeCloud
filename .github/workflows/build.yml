@@ -1,4 +1,5 @@
 name: Build MemeCloud APK
+
 on:
   push:
     branches: [ main ]
@@ -12,6 +13,7 @@ jobs:
       ANDROID_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_SDK_ROOT: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
       ANDROID_NDK_HOME: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r27b
+      PATH: ${{ github.workspace }}/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$PATH
 
     steps:
       - name: Checkout repository
@@ -31,6 +33,7 @@ jobs:
 
       - name: Clean Buildozer cache
         run: |
+          buildozer android clean || true
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
@@ -44,7 +47,6 @@ jobs:
           rm tools.zip
           mkdir -p latest
           mv temp/cmdline-tools/* latest/
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
@@ -69,32 +71,21 @@ jobs:
       - name: Build APK
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          retries=3
-          count=0
-          until [ $count -ge $retries ]
-          do
-            buildozer android debug && break
-            count=$((count+1))
-            echo "Retry $count/$retries..."
-          done
+          buildozer -v android debug || (echo "❌ Buildozer build failed!" && exit 1)
 
       - name: Collect APKs
         run: |
           mkdir -p bin
-          BUILD_APK_DIR="./.buildozer/android/app/bin"
-          if [ ! -d "$BUILD_APK_DIR" ]; then
-            echo "⚠️ Directory $BUILD_APK_DIR does not exist yet. Buildozer might have failed or not created it."
+          APKS=$(find ./.buildozer -type f -name "*.apk" 2>/dev/null)
+          if [ -z "$APKS" ]; then
+            echo "⚠️ No APKs found! Buildozer might have failed."
+            exit 1
           else
-            APKS=$(find "$BUILD_APK_DIR" -type f -name "*.apk" 2>/dev/null)
-            if [ -z "$APKS" ]; then
-              echo "⚠️ No APKs found in $BUILD_APK_DIR"
-            else
-              for apk in $APKS; do
-                cp "$apk" bin/
-              done
-              echo "✅ Collected APKs:"
-              ls bin/
-            fi
+            for apk in $APKS; do
+              cp "$apk" bin/
+            done
+            echo "✅ Collected APKs:"
+            ls bin/
           fi
 
       - name: Upload APK
