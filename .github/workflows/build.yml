@@ -38,6 +38,7 @@ jobs:
           rm -rf $HOME/.buildozer/android/platform/python-for-android
           rm -rf $HOME/.buildozer/android/platform/build-*
 
+      # ---- Установка SDK ----
       - name: Install Android SDK command-line tools
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
@@ -49,18 +50,29 @@ jobs:
           mv temp/cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
-      - name: Install Android Build-tools 33.0.2
+      - name: Install Android Build-tools and platform 33
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
-          yes | sdkmanager --licenses
-          sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platforms;android-33"
-          echo "✅ Build-tools 33.0.2 installed"
-          which aidl
-          aidl --version || echo "aidl version not found"
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses || true
+          sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
+          echo "✅ Installed Android 33 & Build-tools 33.0.2"
+          ls $ANDROID_HOME/build-tools
 
+      - name: Force PATH for Android tools
+        run: |
+          echo "export PATH=$ANDROID_HOME/build-tools/33.0.2:\$PATH" >> $GITHUB_ENV
+          echo "export PATH=$ANDROID_HOME/platform-tools:\$PATH" >> $GITHUB_ENV
+          echo "export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH" >> $GITHUB_ENV
+          echo "✅ Android PATH set"
+
+      - name: Verify AIDL tools
+        run: |
+          which aidl || echo "⚠️ AIDL not found in PATH"
+          find $ANDROID_HOME/build-tools -name aidl || echo "⚠️ No aidl binary found"
+
+      # ---- Сборка APK ----
       - name: Build APK (verbose)
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
           buildozer android debug -v
 
       - name: Debug Buildozer output
