@@ -3,8 +3,6 @@ name: Build MemeCloud APK
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   build:
@@ -38,55 +36,70 @@ jobs:
 
       - name: 🏗️ Initialize Buildozer
         run: |
-          # Проверяем наличие buildozer.spec
           if [ ! -f buildozer.spec ]; then
             echo "❌ buildozer.spec not found! Creating default..."
             buildozer init
           fi
           echo "✅ buildozer.spec is ready"
 
+      - name: 🔍 Debug Buildozer setup
+        run: |
+          echo "=== Buildozer Debug Info ==="
+          buildozer version
+          which buildozer
+          python --version
+          java -version
+          echo "=== Buildozer.spec ==="
+          cat buildozer.spec
+          echo "=== Project Structure ==="
+          ls -la
+
       - name: 🔨 Build APK
         run: |
           set -e
           echo "🚀 Starting APK build process..."
           
-          # Собираем APK с подробным выводом
-          buildozer -v android debug 2>&1 | tee build.log
+          # Включаем максимальную детализацию
+          buildozer -v android debug 2>&1 | tee build.log || true
           
-          echo "✅ Build completed successfully"
+          echo "📋 Build process completed"
 
-      - name: 🔍 Find APK files
+      - name: 🔍 Find and Debug APK files
         run: |
           echo "🔎 Searching for APK files..."
           mkdir -p artifacts
           
-          # Поиск APK в стандартных местах Buildozer
-          if [ -d "./bin" ]; then
-            echo "📁 Checking bin directory..."
-            find ./bin -name "*.apk" -exec cp {} artifacts/ \;
-          fi
+          # Детальный поиск с отладкой
+          echo "=== Searching in common locations ==="
+          find . -name "*.apk" -type f 2>/dev/null | while read apk; do
+            echo "FOUND APK: $apk"
+            cp "$apk" artifacts/
+          done
           
+          echo "=== Checking Buildozer directories ==="
           if [ -d "./.buildozer" ]; then
-            echo "📁 Checking .buildozer directory..."
-            find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \;
+            echo "📁 .buildozer structure:"
+            find ./.buildozer -type d -name "*memecloud*" | head -10
+            find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
           fi
           
-          # Общий поиск по всему проекту
-          echo "📁 Searching entire project..."
-          find . -name "*.apk" -not -path "./artifacts/*" -exec cp {} artifacts/ \;
-          
-          # Проверяем что нашли APK
-          APK_COUNT=$(ls -1 artifacts/*.apk 2>/dev/null | wc -l || echo "0")
-          if [ "$APK_COUNT" -gt "0" ]; then
-            echo "✅ Found $APK_COUNT APK file(s):"
-            ls -la artifacts/
+          # Проверяем результаты
+          APK_FILES=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
+          if [ "$APK_FILES" -eq "0" ]; then
+            echo "❌ No APK files found"
+            echo "Creating debug information..."
+            
+            # Сохраняем информацию для отладки
+            echo "Build failed - no APK produced" > artifacts/debug-info.txt
+            echo "=== Buildozer directory structure ===" >> artifacts/debug-info.txt
+            find ./.buildozer -type d 2>/dev/null | head -20 >> artifacts/debug-info.txt
+            
+            echo "=== Last 50 lines of build log ===" >> artifacts/debug-info.txt
+            tail -50 build.log >> artifacts/debug-info.txt 2>/dev/null || echo "No build log" >> artifacts/debug-info.txt
+            
           else
-            echo "❌ No APK files found!"
-            echo "Creating debug file..."
-            echo "APK not found - check build logs" > artifacts/debug-info.txt
-            # Показываем структуру .buildozer для отладки
-            find ./.buildozer -type f -name "*.apk" | head -10 > artifacts/apk-search.txt
-            ls -la ./.buildozer/android/platform/ >> artifacts/apk-search.txt
+            echo "✅ Found $APK_FILES APK file(s)"
+            ls -la artifacts/
           fi
 
       - name: 📋 Save build logs
@@ -95,21 +108,16 @@ jobs:
           mkdir -p logs
           echo "💾 Saving build logs..."
           
-          # Основной лог сборки
-          if [ -f "build.log" ]; then
-            cp build.log logs/
-          fi
-          
-          # Логи Buildozer
+          # Сохраняем все возможные логи
+          cp build.log logs/ 2>/dev/null || true
           find . -name "*.log" -exec cp {} logs/ \; 2>/dev/null || true
-          
-          # Конфигурация
           cp buildozer.spec logs/ 2>/dev/null || true
           
-          echo "📄 Logs saved:"
-          ls -la logs/
+          # Сохраняем структуру .buildozer для отладки
+          find ./.buildozer -type d > logs/buildozer-structure.txt 2>/dev/null || true
 
       - name: 🚀 Upload APK Artifact
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
@@ -126,15 +134,19 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: ✅ Build Status
+      - name: 📊 Build Summary
         if: always()
         run: |
+          echo "=== BUILD SUMMARY ==="
           if [ -f "artifacts/debug-info.txt" ]; then
-            echo "❌ BUILD FAILED - No APK files were produced"
-            echo "Check the Build-Logs artifact for details"
-            exit 1
+            echo "❌ BUILD FAILED"
+            echo "Check the 'Build-Logs' artifact for detailed error information"
+            echo "Common issues:"
+            echo "1. Missing dependencies in buildozer.spec"
+            echo "2. Android SDK/NDK download issues"
+            echo "3. Python code syntax errors"
+            echo "4. Insfficient disk space"
           else
-            echo "✅ BUILD SUCCESSFUL - APK files are available in MemeCloud-APK artifact"
-            echo "APK files:"
-            ls -la artifacts/
+            echo "✅ BUILD SUCCESSFUL"
+            echo "APK files available in 'MemeCloud-APK' artifact"
           fi
