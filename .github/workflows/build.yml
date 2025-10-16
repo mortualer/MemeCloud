@@ -47,16 +47,10 @@ jobs:
           buildozer android clean 2>/dev/null || true
           rm -rf .buildozer bin 2>/dev/null || true
 
-      - name: 📝 Initialize Buildozer
-        run: |
-          echo "📝 Initializing Buildozer..."
-          buildozer init 2>/dev/null || true
-          echo "✅ Buildozer initialized"
-
-      - name: 🛠️ Manual Android SDK setup
+      - name: 🛠️ Complete Android SDK setup
         run: |
           set -e
-          echo "🛠️ Setting up Android SDK manually..."
+          echo "🛠️ Setting up Android SDK..."
           
           ANDROID_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$ANDROID_SDK_DIR"
@@ -69,20 +63,31 @@ jobs:
           mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/
           rm cmdline-tools.zip
           
+          # Create symlinks for Buildozer compatibility
+          mkdir -p "$ANDROID_SDK_DIR/tools/bin"
+          ln -sf "$ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_SDK_DIR/tools/bin/sdkmanager" 2>/dev/null || true
+          
           export ANDROID_HOME="$ANDROID_SDK_DIR"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH"
           
           # Accept licenses
           mkdir -p "$ANDROID_HOME/licenses"
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$ANDROID_HOME/licenses/android-sdk-license"
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_HOME/licenses/android-sdk-license"
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> "$ANDROID_HOME/licenses/android-sdk-license"
           
+          echo "=== Installing Android components ==="
           # Install required components
-          yes | sdkmanager --install "platform-tools" || true
-          yes | sdkmanager --install "platforms;android-33" || true
-          yes | sdkmanager --install "build-tools;33.0.2" || true
+          yes | sdkmanager --install "platform-tools" 2>&1 | grep -v "Warning" || true
+          yes | sdkmanager --install "platforms;android-33" 2>&1 | grep -v "Warning" || true
+          yes | sdkmanager --install "build-tools;33.0.2" 2>&1 | grep -v "Warning" || true
+          
+          # Verify installation
+          echo "=== Verification ==="
+          ls -la "$ANDROID_HOME/tools/bin/sdkmanager" 2>/dev/null || echo "sdkmanager symlink created"
+          ls -la "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>/dev/null || echo "Checking for aidl..."
           
           echo "✅ Android SDK setup completed"
 
@@ -94,14 +99,16 @@ jobs:
           # Set environment variables
           export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
           
           echo "=== Environment Check ==="
           echo "ANDROID_HOME: $ANDROID_HOME"
           echo "Java: $(java -version 2>&1 | head -1)"
-          echo "sdkmanager: $(which sdkmanager)"
+          echo "sdkmanager path: $(which sdkmanager)"
+          echo "sdkmanager exists in tools/bin: $(ls -la $ANDROID_HOME/tools/bin/sdkmanager 2>/dev/null && echo 'YES' || echo 'NO')"
           
           # Build the APK
+          echo "=== Starting Buildozer ==="
           buildozer -v android debug 2>&1 | tee build_output.log
 
       - name: 📤 Collect APK files
