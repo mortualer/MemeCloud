@@ -14,21 +14,15 @@ from kivy.uix.filechooser import FileChooserListView
 import os
 import requests
 import webbrowser
+from kivy.utils import platform
 
 # -------------------------
 # Класс SoundButton
 # -------------------------
 class SoundButton(BoxLayout):
-    current_button = None  # Отслеживаем текущую воспроизводимую кнопку
+    current_button = None  # Текущая воспроизводимая кнопка
 
     def __init__(self, text, sound, icon_path=None, app=None, **kwargs):
-        """
-        Создает виджет кнопки звука.
-        :param text: Название кнопки
-        :param sound: Звук (SoundLoader.load)
-        :param icon_path: Путь к иконке
-        :param app: Ссылка на приложение (для доступа к другим кнопкам)
-        """
         super().__init__(**kwargs)
         self.app = app
         self.orientation = 'horizontal'
@@ -38,10 +32,10 @@ class SoundButton(BoxLayout):
         self.padding = [10, 10, 10, 10]
         self.sound = sound
         self.btn_text = text
-        self.is_expanded = False  # Расширена ли кнопка
-        self.pinned = False       # Закреплена ли кнопка
+        self.is_expanded = False
+        self.pinned = False
 
-        # Отрисовка фона и тени
+        # Фон и тень
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
             self.shadow = RoundedRectangle(pos=(self.x - 2, self.y - 2),
@@ -50,12 +44,11 @@ class SoundButton(BoxLayout):
             self.bg_color = Color(0.25, 0.25, 0.35, 1)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
 
-        # Добавление иконки, если есть
         if icon_path and os.path.exists(icon_path):
             icon = Image(source=icon_path, size_hint=(None, 1), width=50)
             self.add_widget(icon)
 
-        # Создание основной кнопки
+        # Кнопка
         self.button = Button(
             text=text,
             size_hint=(1, 1),
@@ -66,37 +59,30 @@ class SoundButton(BoxLayout):
             valign="middle"
         )
         self.button.text_size = (None, None)
-        self.button.bind(on_press=self.play_sound)  # Воспроизведение звука при нажатии
+        self.button.bind(on_press=self.play_sound)
         self.button.bind(on_touch_down=self.start_long_press, on_touch_up=self.end_long_press)
         self.add_widget(self.button)
 
-        # Обновление размеров при изменении позиции
         self.bind(pos=self.update_rect, size=self.update_rect)
         self._long_press_trigger = Clock.create_trigger(self.expand, 0.5)
 
-    # Обновление позиции и размера фона и тени
     def update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
         self.shadow.pos = (self.x - 2, self.y - 2)
         self.shadow.size = (self.width + 4, self.height + 4)
 
-    # Воспроизведение звука
     def play_sound(self, instance=None):
-        # Останов предыдущей воспроизводимой кнопки
         if SoundButton.current_button and SoundButton.current_button != self:
             SoundButton.current_button.stop_sound_and_collapse()
-
         SoundButton.current_button = self
 
         if self.sound:
             self.sound.stop()
             self.sound.play()
             self.start_highlight()
-            # Проверяем состояние воспроизведения
             Clock.schedule_interval(self.check_sound, 0.1)
 
-    # Анимация подсветки кнопки при воспроизведении
     def start_highlight(self):
         anim = Animation(rgba=(0.5, 0.5, 0.7, 1), duration=0.2) + \
                Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2)
@@ -104,49 +90,39 @@ class SoundButton(BoxLayout):
         anim.start(self.bg_color)
         self.highlight_anim = anim
 
-    # Остановка подсветки
     def stop_highlight(self):
         if hasattr(self, "highlight_anim"):
             self.highlight_anim.cancel(self.bg_color)
             self.bg_color.rgba = (0.25, 0.25, 0.35, 1)
 
-    # Проверка окончания воспроизведения
     def check_sound(self, dt):
         if self.sound.state != 'play':
             self.stop_highlight()
-            # Если кнопка расширена, а Pin выключен — сжимаем
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
             return False
         return True
 
-    # Начало длинного нажатия для расширения
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
             self._long_press_trigger()
         return False
 
-    # Завершение длинного нажатия
     def end_long_press(self, instance, touch):
         self._long_press_trigger.cancel()
         return False
 
-    # Расширение кнопки на весь экран
     def expand(self, *args):
         if self.is_expanded:
             return
-
-        # Сжимаем другие кнопки, если Pin не активен
         if self.app:
             for btn in self.app.buttons:
                 if btn != self and btn.is_expanded and not getattr(self.app, "pin_active", False):
                     btn.collapse()
-
         self.is_expanded = True
         anim = Animation(pos=(0, 0), size=(Window.width, Window.height), duration=0.3, t='out_quad')
         anim.start(self)
 
-    # Сжатие кнопки
     def collapse(self):
         if not self.is_expanded:
             return
@@ -154,7 +130,6 @@ class SoundButton(BoxLayout):
         anim = Animation(size=(self.width, 150), pos=self.pos, duration=0.3, t='out_quad')
         anim.start(self)
 
-    # Остановка звука и сжатие
     def stop_sound_and_collapse(self):
         if self.sound:
             self.sound.stop()
@@ -167,9 +142,6 @@ class SoundButton(BoxLayout):
 # Класс DraggableBox
 # -------------------------
 class DraggableBox(BoxLayout):
-    """
-    Контейнер, в котором кнопки можно перетаскивать
-    """
     def on_touch_down(self, touch):
         for child in reversed(self.children):
             if child.collide_point(*touch.pos):
@@ -184,7 +156,6 @@ class DraggableBox(BoxLayout):
             dy = touch.y - self.dragged.drag_start_y
             self.dragged.y += dy
             self.dragged.drag_start_y = touch.y
-            # Перерисовываем порядок кнопок
             children_sorted = sorted(self.children, key=lambda w: w.y, reverse=True)
             self.clear_widgets()
             for w in children_sorted:
@@ -202,7 +173,7 @@ class DraggableBox(BoxLayout):
 # -------------------------
 class MyApp(App):
     CURRENT_VERSION = "1.0.0"
-    GITHUB_REPO = "mortualer/MemeCloud"  # <- репозиторий для проверки обновлений
+    GITHUB_REPO = "mortualer/SoundCloud"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -210,22 +181,38 @@ class MyApp(App):
         self.save_file = os.path.join(self.save_dir, "saved_paths.txt")
         os.makedirs(self.save_dir, exist_ok=True)
         self.buttons = []
-        self.pin_active = False  # Состояние кнопки Pin
+        self.pin_active = False
 
-    # Создание интерфейса
     def build(self):
-        from kivy.utils import platform
+        # ------------------------------
         # Запрос разрешений на Android
+        # ------------------------------
         if platform == 'android':
-            from android.permissions import request_permissions, Permission
-            request_permissions([
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE
-            ])
+            try:
+                from android.permissions import request_permissions, Permission
+                request_permissions([
+                    Permission.READ_EXTERNAL_STORAGE,
+                    Permission.WRITE_EXTERNAL_STORAGE
+                ])
+                # Manage External Storage (Android 11+)
+                try:
+                    from jnius import autoclass
+                    Intent = autoclass('android.content.Intent')
+                    Uri = autoclass('android.net.Uri')
+                    Settings = autoclass('android.provider.Settings')
+                    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                    currentActivity = PythonActivity.mActivity
+                    if not Settings.canManageExternalStorage(currentActivity):
+                        intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        uri = Uri.parse('package:' + currentActivity.getPackageName())
+                        intent.setData(uri)
+                        currentActivity.startActivity(intent)
+                except Exception as e:
+                    print("Manage External Storage request failed:", e)
+            except Exception as e:
+                print("Permission request failed:", e)
 
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
-
-        # Верхняя панель с поиском, Pin и Upload
         root = BoxLayout(orientation='vertical', spacing=10, padding=10)
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
@@ -235,7 +222,7 @@ class MyApp(App):
         top_bar.add_widget(self.search_input)
 
         self.pin_button = Button(text="Pin", size_hint=(None, 1), width=100,
-                                 background_color=(0.4, 0.7, 1, 1), color=(1, 1, 1, 1))
+                                 background_color=(0.3, 0.8, 0.3, 1), color=(1, 1, 1, 1))
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
@@ -246,22 +233,17 @@ class MyApp(App):
 
         root.add_widget(top_bar)
 
-        # Скролл со списком кнопок
         self.scroll = ScrollView(size_hint=(1, 1))
         self.layout = DraggableBox(orientation='vertical', spacing=15, size_hint_y=None)
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
         root.add_widget(self.scroll)
 
-        # Загружаем ранее сохраненные кнопки
         self.load_existing_sounds()
-
-        # Проверка обновлений через GitHub
         Clock.schedule_once(lambda dt: self.check_for_update(), 1)
-
         return root
 
-    # Загрузка кнопок из сохраненного файла
+    # Загрузка сохранённых звуков
     def load_existing_sounds(self):
         if os.path.exists(self.save_file):
             with open(self.save_file, "r", encoding="utf-8") as f:
@@ -269,13 +251,11 @@ class MyApp(App):
                     path = line.strip()
                     if os.path.exists(path):
                         self.add_sound_button(path)
-        else:
-            folder = os.path.dirname(os.path.abspath(__file__))
-            for filename in sorted(os.listdir(folder)):
-                if filename.lower().endswith(".mp3") and filename != "click.mp3":
-                    self.add_sound_button(os.path.join(folder, filename))
+        if not self.buttons and os.path.exists(self.save_dir):
+            for filename in sorted(os.listdir(self.save_dir)):
+                if filename.lower().endswith(".mp3"):
+                    self.add_sound_button(os.path.join(self.save_dir, filename))
 
-    # Добавление одной кнопки в интерфейс
     def add_sound_button(self, path):
         btn_text = os.path.splitext(os.path.basename(path))[0]
         icon_file = os.path.join(os.path.dirname(path), btn_text + ".png")
@@ -284,7 +264,6 @@ class MyApp(App):
         self.layout.add_widget(btn_widget)
         self.buttons.append(btn_widget)
 
-    # Открытие диалога выбора файлов
     def open_filechooser(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10)
         filechooser = FileChooserListView(filters=['*.mp3'], path="/storage/emulated/0/")
@@ -301,22 +280,33 @@ class MyApp(App):
 
         def select_file(instance):
             if filechooser.selection:
-                with open(self.save_file, "a", encoding="utf-8") as f:
-                    for path in filechooser.selection:
-                        self.add_sound_button(path)
-                        f.write(path + "\n")
+                for path in filechooser.selection:
+                    try:
+                        filename = os.path.basename(path)
+                        new_path = os.path.join(self.save_dir, filename)
+                        if os.path.exists(new_path):
+                            base, ext = os.path.splitext(filename)
+                            new_path = os.path.join(self.save_dir, f"{base}_1{ext}")
+                        os.rename(path, new_path)
+                        self.add_sound_button(new_path)
+                        with open(self.save_file, "a", encoding="utf-8") as f:
+                            f.write(new_path + "\n")
+                    except Exception as e:
+                        print("File move error:", e)
                 popup.dismiss()
 
         select_btn.bind(on_release=select_file)
         cancel_btn.bind(on_release=lambda x: popup.dismiss())
         popup.open()
 
-    # Логика кнопки Pin (вкл/выкл)
+    # --- Pin кнопка ---
     def toggle_pin(self, instance):
         self.pin_active = not self.pin_active
-        instance.background_color = (0.2, 0.5, 0.8, 1) if self.pin_active else (0.4, 0.7, 1, 1)
+        if self.pin_active:
+            instance.background_color = (0.15, 0.25, 0.45, 1)  # тёмный
+        else:
+            instance.background_color = (0.3, 0.8, 0.3, 1)  # зелёный
 
-        # Закрепляем или открепляем расширенные кнопки
         for btn in self.buttons:
             if btn.is_expanded:
                 if self.pin_active:
@@ -325,7 +315,6 @@ class MyApp(App):
                     btn.pinned = False
                     btn.collapse()
 
-    # Фильтрация кнопок по поиску
     def filter_buttons(self, *args):
         value = self.search_input.text.lower()
         for btn_widget in self.buttons:
@@ -334,10 +323,9 @@ class MyApp(App):
             btn_widget.disabled = not visible
             btn_widget.height = 150 if visible else 0
 
-    # Проверка обновлений через GitHub
     def check_for_update(self):
         try:
-            url = f"https://api.github.com/repos/{self.GITHUB_REPO}/releases/latest"
+           url = "https://api.github.com/repos/mortualer/SoundCloud/releases/latest"
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
@@ -347,14 +335,11 @@ class MyApp(App):
         except Exception as e:
             print("Update check failed:", e)
 
-    # Показ всплывающего окна при новой версии
     def show_update_popup(self, latest_version, url):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Button(text=f"New version available: {latest_version}",
-                                  background_color=(0,0,0,0), color=(0,0,0,1)))
+                                  background_color=(0, 0, 0, 0), color=(0, 0, 0, 1)))
         btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        update_btn = Button(text="Update")
-        cancel_btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
         update_btn = Button(text="Update")
         cancel_btn = Button(text="Cancel")
         btn_box.add_widget(update_btn)
@@ -362,8 +347,6 @@ class MyApp(App):
         content.add_widget(btn_box)
 
         popup = Popup(title="Update Available", content=content, size_hint=(0.8, 0.4))
-
-        # Открываем страницу с обновлением в браузере
         update_btn.bind(on_release=lambda x: webbrowser.open(url))
         update_btn.bind(on_release=popup.dismiss)
         cancel_btn.bind(on_release=popup.dismiss)
