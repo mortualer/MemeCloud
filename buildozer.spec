@@ -20,7 +20,7 @@ source.main = main.py
 source.dir = .
 
 # (str) Значок приложения (если есть)
-icon.filename = %(source.dir)s/icon.png
+icon.filename = %(source.dir)s/memeicon.jpg
 
 # (str) Требуемый Python
 requirements = python3,kivy==2.3.1,kivymd,pillow
@@ -50,7 +50,9 @@ android.ndk_api = 21
 android.debug = 1
 
 # (str) Разрешения Android
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 
 # (bool) Включить логирование
 log_level = 2
+
+android.build_tools = 33.0.2
