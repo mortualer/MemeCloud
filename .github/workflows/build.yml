@@ -28,6 +28,13 @@ jobs:
             cmake libffi-dev libssl-dev \
             curl wget unzip
 
+      - name: 🔧 Set Java 17 as default
+        run: |
+          sudo update-alternatives --set java /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/temurin-17-jdk-amd64/bin/javac
+          java -version
+          javac -version
+
       - name: 🔧 Install Buildozer
         run: |
           python -m pip install --upgrade pip
@@ -41,42 +48,26 @@ jobs:
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
-      - name: 🛠️ Install Android Command Line Tools
+      - name: 🛠️ Install Android SDK using Buildozer (автоматически)
         run: |
-          cd $HOME/.buildozer/android/platform/android-sdk
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d cmdline-tools
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/
-          rm cmdline-tools.zip
-
-      - name: ⚙️ Install Android SDK components
-        run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          
-          # Принимаем лицензии
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          
-          # Устанавливаем необходимые компоненты
-          sdkmanager --install "platform-tools"
-          sdkmanager --install "platforms;android-33"
-          sdkmanager --install "build-tools;33.0.2"
-          sdkmanager --install "cmdline-tools;latest"
+          echo "🚀 Letting Buildozer handle Android SDK installation..."
+          # Buildozer сам установит нужные компоненты с правильной Java
+          buildozer android update sdk 2>&1 | tee sdk_install.log || true
 
       - name: 🏗️ Build APK
         run: |
           set -e
           echo "🚀 Starting APK build process..."
           
-          # Устанавливаем переменные окружения
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
+          # Проверяем Java версию
+          echo "=== Java Version ==="
+          java -version
+          javac -version
           
-          # Собираем APK
+          # Собираем APK - Buildozer сам разберется с SDK
           buildozer -v android debug 2>&1 | tee build_output.log
 
       - name: 📤 Collect APK files
@@ -102,9 +93,6 @@ jobs:
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
             echo "Build failed" > artifacts/debug-info.txt
-            # Сохраняем информацию для отладки
-            echo "=== Buildozer structure ===" >> artifacts/debug-info.txt
-            find ./.buildozer -type d 2>/dev/null | head -20 >> artifacts/debug-info.txt
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
@@ -117,6 +105,7 @@ jobs:
           echo "💾 Saving build logs..."
           
           cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
+          cp sdk_install.log logs/ 2>/dev/null || true
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
           
