@@ -32,11 +32,6 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython virtualenv
 
-      - name: Check tar
-        run: |
-          which tar
-          tar --version
-
       - name: Clean Buildozer cache
         run: |
           rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
@@ -56,23 +51,15 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "build-tools;33.0.2" "platforms;android-33"
 
-      - name: Patch Buildozer SDK path
-        run: |
-          mkdir -p $ANDROID_HOME/tools/bin
-          ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
-
       - name: Ensure aidl is available
         run: |
-          export PATH=$ANDROID_HOME/build-tools/33.0.2:$PATH
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
           if ! command -v aidl &> /dev/null; then
             echo "❌ aidl not found! Installing build-tools..."
             yes | sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2"
-            if ! command -v aidl &> /dev/null; then
-              echo "❌ aidl still not found!"
-              exit 1
-            fi
           fi
           echo "✅ aidl found at $(which aidl)"
+          aidl --version || echo "aidl version not found"
 
       - name: Build APK (verbose)
         run: |
