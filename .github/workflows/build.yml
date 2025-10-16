@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
       - name: 🧩 Checkout repository
@@ -26,7 +26,7 @@ jobs:
             python3-pip autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev libtinfo5 \
             cmake libffi-dev libssl-dev \
-            curl wget
+            curl wget unzip
 
       - name: 🔧 Install Buildozer
         run: |
@@ -34,71 +34,93 @@ jobs:
           pip install buildozer
           pip install Cython==0.29.33
 
-      - name: 📝 Accept Android SDK licenses
+      - name: 📝 Pre-configure Android SDK licenses
         run: |
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
-          
-          # Создаем файлы лицензий вручную
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
-      - name: 🏗️ Build APK with detailed logging
+      - name: 🛠️ Install Android Command Line Tools
+        run: |
+          cd $HOME/.buildozer/android/platform/android-sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d cmdline-tools
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/
+          rm cmdline-tools.zip
+
+      - name: ⚙️ Install Android SDK components
+        run: |
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          
+          # Принимаем лицензии
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          
+          # Устанавливаем необходимые компоненты
+          sdkmanager --install "platform-tools"
+          sdkmanager --install "platforms;android-33"
+          sdkmanager --install "build-tools;33.0.2"
+          sdkmanager --install "cmdline-tools;latest"
+
+      - name: 🏗️ Build APK
         run: |
           set -e
           echo "🚀 Starting APK build process..."
           
-          # Собираем APK и сохраняем логи в файл
-          buildozer -v android debug 2>&1 | tee build_output.log
+          # Устанавливаем переменные окружения
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH
           
-          echo "📋 Build process completed"
+          # Собираем APK
+          buildozer -v android debug 2>&1 | tee build_output.log
 
       - name: 📤 Collect APK files
         run: |
           mkdir -p artifacts
           echo "🔎 Searching for APK files..."
           
-          # Ищем APK во всех возможных местах
-          find . -name "*.apk" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
-          
+          # Проверяем стандартные пути
           if [ -d "./bin" ]; then
-            cp ./bin/*.apk artifacts/ 2>/dev/null || true
+            echo "📁 Checking bin directory..."
+            find ./bin -name "*.apk" -exec cp {} artifacts/ \;
           fi
           
-          APK_COUNT=$(ls -1 artifacts/*.apk 2>/dev/null | wc -l || echo "0")
+          if [ -d "./.buildozer" ]; then
+            echo "📁 Checking .buildozer directory..."
+            find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \;
+          fi
+          
+          # Общий поиск
+          find . -name "*.apk" -not -path "./artifacts/*" -exec cp {} artifacts/ \; 2>/dev/null || true
+          
+          APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
-            echo "Build failed - check build_output.log" > artifacts/debug-info.txt
+            echo "Build failed" > artifacts/debug-info.txt
+            # Сохраняем информацию для отладки
+            echo "=== Buildozer structure ===" >> artifacts/debug-info.txt
+            find ./.buildozer -type d 2>/dev/null | head -20 >> artifacts/debug-info.txt
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
           fi
 
-      - name: 📋 Save all build logs
+      - name: 📋 Save build logs
         if: always()
         run: |
           mkdir -p logs
           echo "💾 Saving build logs..."
           
-          # Сохраняем основной лог
-          if [ -f "build_output.log" ]; then
-            cp build_output.log logs/
-            echo "✅ Saved build_output.log"
-          else
-            echo "❌ build_output.log not found"
-            echo "No build log available" > logs/no_logs.txt
-          fi
-          
-          # Сохраняем другие логи
+          cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
-          
-          # Сохраняем конфигурацию
           cp buildozer.spec logs/ 2>/dev/null || true
           
-          echo "📄 Log files saved:"
+          echo "📄 Log files:"
           ls -la logs/
 
       - name: 🚀 Upload APK Artifact
@@ -117,15 +139,3 @@ jobs:
           path: logs/
           retention-days: 7
           if-no-files-found: warn
-
-      - name: 📊 Build Summary
-        if: always()
-        run: |
-          echo "=== BUILD SUMMARY ==="
-          if [ -f "artifacts/debug-info.txt" ]; then
-            echo "❌ BUILD FAILED"
-            echo "Check the 'Build-Logs' artifact for detailed error information"
-          else
-            echo "✅ BUILD SUCCESSFUL"
-            echo "APK files available in 'MemeCloud-APK' artifact"
-          fi
