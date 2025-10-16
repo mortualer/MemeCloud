@@ -30,14 +30,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zip unzip openjdk-17-jdk python3-pip git wget tar curl build-essential
           pip install --upgrade pip
-          # фиксированные версии, которые не тянут build-tools 36.1
           pip install buildozer==1.4.0 python-for-android==2023.9.16 cython virtualenv
 
       - name: 🧹 Clean Buildozer cache
         run: |
-          rm -rf $HOME/.buildozer/android/platform/android-ndk-r*
-          rm -rf $HOME/.buildozer/android/platform/python-for-android
-          rm -rf $HOME/.buildozer/android/platform/build-*
+          buildozer android clean || true
+          rm -rf $HOME/.buildozer
 
       - name: 📦 Install Android SDK command-line tools
         run: |
@@ -50,25 +48,30 @@ jobs:
           mv temp/cmdline-tools/* latest/
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
-      - name: ⚙️ Install Android Build-tools 33.0.2
+      - name: ⚙️ Install Android Build-tools 33.0.2 and accept licenses
         run: |
           set +e
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
-          yes | sdkmanager --licenses
+          # Авто-принятие лицензий Google
+          yes | sdkmanager --licenses || true
+          # Установка необходимых платформ и build-tools
           sdkmanager --sdk_root=$ANDROID_HOME "build-tools;33.0.2" "platforms;android-33" "platform-tools"
           echo "✅ Build-tools 33.0.2 installed"
-          which aidl || true
-          aidl --version || echo "⚠️ aidl not found, but continuing..."
+          # Проверка aidl
+          AIDL_BIN="$ANDROID_HOME/build-tools/33.0.2/aidl"
+          if [ -f "$AIDL_BIN" ]; then
+              echo "✅ aidl found at $AIDL_BIN"
+          else
+              echo "❌ aidl not found!"
+              exit 1
+          fi
           set -e
 
-      # ---- 🔹 Fake build-tools 36.1 для обхода ошибки лицензий ----
-      - name: 🔧 Fake build-tools 36.1
+      - name: 🔧 Fake build-tools 36.1 to bypass Buildozer check
         run: |
           mkdir -p $ANDROID_HOME/build-tools/36.1.0
           cp -r $ANDROID_HOME/build-tools/33.0.2/* $ANDROID_HOME/build-tools/36.1.0/ || true
           chmod -R a+rX $ANDROID_HOME/build-tools
-          echo "✅ Fake build-tools/36.1.0 created"
-          ls -la $ANDROID_HOME/build-tools
 
       - name: 🏗️ Build APK (verbose)
         run: |
