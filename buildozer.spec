@@ -1,58 +1,68 @@
 [app]
 
-# (str) Название приложения
+# (str) Title of your application
 title = MemeCloud
 
-# (str) Пакет приложения
+# (str) Package name
 package.name = memecloud
-package.domain = org.example
 
-# (str) Версия приложения
-version = 1.0
+# (str) Package domain (needed for android/ios packaging)
+package.domain = org.mortualer
 
-# (list) Основные исходники
-source.include_exts = py,png,jpg,kv,atlas
-
-# (str) Основной файл
-source.main = main.py
-
-# (str) Папка с исходниками (ВАЖНО!)
+# (str) Source code where the main.py live
 source.dir = .
 
-# (str) Значок приложения (если есть)
-icon.filename = %(source.dir)s/memeicon.jpg
+# (list) Source files to include (let empty to include all the files)
+source.include_exts = py,png,jpg,kv,atlas,mp3,json,txt
 
-# (str) Требуемый Python
-requirements = python3,kivy==2.3.1,kivymd,pillow
+# (str) Application versioning (method 1)
+version = 1.0.0
 
-# (list) Архитектуры Android
-android.archs = arm64-v8a,armeabi-v7a
+# (list) Application requirements
+requirements = python3,kivy,requests,openssl
 
-# (int) Минимальная версия Android
-android.minapi = 21
+# (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
+orientation = portrait
 
-# (int) Целевая версия Android
+#
+# Android specific
+#
+
+# (bool) Indicate if the application should be fullscreen or not
+fullscreen = 0
+
+# (list) Permissions
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
+
+# (int) Target Android API, should be as high as possible.
 android.api = 33
 
-# (str) Версия NDK
-android.ndk = 27b
+# (int) Minimum API your APK will support.
+android.minapi = 21
 
-# (str) Bootstrap для приложения (sdl2 для Kivy)
-p4a.bootstrap = sdl2
+# (list) Android architecture to compile for
+android.arch = arm64-v8a
 
-# (bool) Копировать библиотеки в APK
-android.copy_libs = 1
+# (str) Android gradle plugin version
+android.gradle_plugin_version = 7.0.0
 
-# (str) Настройка NDK API
+# (int) Android NDK API to use
 android.ndk_api = 21
 
-# (bool) Использовать debug сборку
-android.debug = 1
+# (bool) Use --private data storage (True) or --dir public storage (False)
+android.private_storage = True
 
-# (str) Разрешения Android
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
+# (str) Presplash background color
+android.presplash_color = #FFFFFF
 
-# (bool) Включить логирование
+#
+# Buildozer settings
+#
+
+[buildozer]
+
+# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
 log_level = 2
 
-android.build_tools = 33.0.2
+# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+warn_on_root = 1
