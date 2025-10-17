@@ -100,7 +100,9 @@ jobs:
           buildozer android clean
           
           # Build RELEASE version
-          buildozer -v android release
+          buildozer -v android release -- --package-type apk
+
+          - name: 🏗️ Build APK
 
       - name: 🔍 Check build errors
         if: always()
