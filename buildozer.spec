@@ -13,7 +13,7 @@ icon.filename = %(source.dir)s/icon.jpg
 
 # (str) Presplash of the application (экран загрузки)
 
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
