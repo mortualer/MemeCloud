@@ -36,12 +36,11 @@ jobs:
           echo "=== Java Version ==="
           java -version
 
-      - name: 🔧 Install Buildozer and dependencies
+      - name: 🔧 Install Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install buildozer
           pip install Cython==0.29.33
-          pip install python-for-android
 
       - name: 🛠️ Complete Android SDK setup with Java 17
         run: |
@@ -80,10 +79,10 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
-      - name: 🏗️ Build APK (Release версия)
+      - name: 🏗️ Build APK
         run: |
           set -e
-          echo "🚀 Starting RELEASE APK build process..."
+          echo "🚀 Starting APK build process..."
           
           # Set environment variables
           export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
@@ -96,36 +95,24 @@ jobs:
           echo "sdkmanager: $(which sdkmanager)"
           echo "aidl exists: $(ls -la $ANDROID_HOME/build-tools/33.0.2/aidl 2>/dev/null && echo 'YES' || echo 'NO')"
           
-          # Clean previous builds
+          # Build the APK - Очистка и принудительная сборка APK
           buildozer android clean
-          
-          # Build RELEASE version
-          buildozer -v android release -- --package-type apk
-
-          - name: 🏗️ Build APK
-
-      - name: 🔍 Check build errors
-        if: always()
-        run: |
-          echo "=== Checking for build errors ==="
-          if [ -f "build_output.log" ]; then
-            echo "Last 50 lines of build output:"
-            tail -50 build_output.log
-            echo ""
-            echo "=== ERRORS FOUND ==="
-            grep -i "error\|failed\|exception" build_output.log | tail -20 || echo "No errors found"
-          else
-            echo "No build_output.log found"
-          fi
+          buildozer -v android release
+          # Если не сработает, попробуйте:
+          # buildozer -v android release -- --package-type apk
 
       - name: 📤 Collect APK files
         run: |
           mkdir -p artifacts
           echo "🔎 Searching for APK files..."
           
+          # Ищем APK файлы
           find . -name "*.apk" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
           
+          # Проверяем bin директорию
           if [ -d "./bin" ]; then
+            echo "📁 Contents of bin directory:"
+            ls -la ./bin/
             find ./bin -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
           fi
           
@@ -136,10 +123,9 @@ jobs:
           APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
-            echo "Build failed" > artifacts/debug-info.txt
-            # Show what's in bin directory
-            echo "Contents of bin directory:"
-            ls -la ./bin/ 2>/dev/null || echo "No bin directory"
+            echo "Checking for AAB files:"
+            find . -name "*.aab" -type f -exec ls -la {} \; 2>/dev/null || true
+            echo "Build failed - no APK" > artifacts/debug-info.txt
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
@@ -151,18 +137,11 @@ jobs:
           mkdir -p logs
           echo "💾 Saving build logs..."
           
-          # Save main build log
-          if [ -f "build_output.log" ]; then
-            cp build_output.log logs/
-          else
-            echo "No build_output.log found" > logs/no_build_log.txt
-          fi
-          
-          # Save other logs
+          cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
           
-          echo "📄 Log files saved:"
+          echo "📄 Log files:"
           ls -la logs/
 
       - name: 🚀 Upload APK Artifact
@@ -181,22 +160,3 @@ jobs:
           path: logs/
           retention-days: 7
           if-no-files-found: warn
-
-      - name: 📊 Build Summary
-        if: always()
-        run: |
-          echo "=== BUILD SUMMARY ==="
-          if [ -f "artifacts/debug-info.txt" ]; then
-            echo "❌ BUILD FAILED"
-            echo "Check Build-Logs artifact for details"
-          else
-            APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
-            if [ "$APK_COUNT" -gt "0" ]; then
-              echo "✅ BUILD SUCCESSFUL"
-              echo "Generated $APK_COUNT APK file(s)"
-              echo "APK files:"
-              find artifacts -name "*.apk" -exec echo "  - {}" \;
-            else
-              echo "⚠️ BUILD COMPLETED BUT NO APK FOUND"
-            fi
-          fi
