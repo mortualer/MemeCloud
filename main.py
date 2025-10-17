@@ -149,7 +149,7 @@ class SoundButton(BoxLayout):
                     btn.collapse()
         self.is_expanded = True
         
-        # Автоматически воспроизводим звук при расширении
+        # Automatically play sound when expanded
         self.play_sound()
         
         # Create expanded view
@@ -162,11 +162,11 @@ class SoundButton(BoxLayout):
         # Clear current widgets
         self.clear_widgets()
         
-        # Main expanded layout - делаем его кликабельным для воспроизведения звука
+        # Main expanded layout - make it clickable for sound playback
         expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
-        expanded_layout.bind(on_touch_down=self.on_expanded_touch)  # Обработка кликов для воспроизведения
+        expanded_layout.bind(on_touch_down=self.on_expanded_touch)  # Handle clicks for playback
         
-        # Title - тоже кликабельный для воспроизведения звука
+        # Title - also clickable for sound playback
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
@@ -178,7 +178,7 @@ class SoundButton(BoxLayout):
         title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
         
-        # Button layout - только Delete и Close
+        # Button layout - only Delete and Close
         btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
         
         # Delete button
@@ -208,14 +208,14 @@ class SoundButton(BoxLayout):
         self.add_widget(expanded_layout)
 
     def on_expanded_touch(self, instance, touch):
-        # При клике на развернутую кнопку - воспроизводим звук
+        # When clicking on expanded button - play sound
         if self.is_expanded and touch.is_double_tap:
             self.play_sound()
             return True
         return False
 
     def on_title_touch(self, instance, touch):
-        # При клике на заголовок - воспроизводим звук
+        # When clicking on title - play sound
         if self.is_expanded and instance.collide_point(*touch.pos):
             self.play_sound()
             return True
@@ -320,7 +320,11 @@ class MyApp(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Правильные пути для Android
+        
+        # Check for icon files
+        self.check_icons()
+        
+        # Correct paths for Android
         if platform == 'android':
             from android.storage import app_storage_path
             self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
@@ -339,41 +343,33 @@ class MyApp(App):
         self.sound_settings = {}
         self.load_settings()
 
+    def check_icons(self):
+        """Check for icon files"""
+        required_icons = ['icon.png', 'icon-foreground.png', 'icon-background.png']
+        missing_icons = []
+        
+        for icon in required_icons:
+            if not os.path.exists(icon):
+                missing_icons.append(icon)
+        
+        if missing_icons:
+            print(f"Missing icons: {missing_icons}")
+            print("Create them using create_icons.py")
+        else:
+            print("All icon files present")
+
     def build(self):
-        # Принудительно устанавливаем иконку
+        # Set app icon
         if os.path.exists('icon.png'):
             self.icon = 'icon.png'
-            print("✅ Иконка приложения установлена")
+            print("App icon set successfully")
         else:
-            print("⚠️ Файл иконки не найден")
+            print("Icon file not found")
         
-        # ------------------------------
-        # Android Permissions Request - ИСПРАВЛЕННАЯ ВЕРСИЯ
-        # ------------------------------
+        # Android permissions request
         if platform == 'android':
-            try:
-                print("📋 Запрос разрешений Android...")
-                from android.permissions import request_permissions, Permission, check_permission
-                
-                # Современные разрешения для Android 13+
-                permissions = [
-                    Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.READ_MEDIA_AUDIO
-                ]
-                
-                # Проверяем и запрашиваем разрешения
-                granted = all(check_permission(p) for p in permissions)
-                if not granted:
-                    print("🔐 Запрашиваем разрешения...")
-                    request_permissions(permissions)
-                    print("✅ Разрешения запрошены успешно")
-                else:
-                    print("✅ Все разрешения уже предоставлены")
-                    
-            except Exception as e:
-                print(f"❌ Ошибка запроса разрешений: {e}")
-
+            self.request_android_permissions()
+        
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
         root = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
@@ -415,14 +411,39 @@ class MyApp(App):
         return root
 
     def on_start(self):
-        """Вызывается когда приложение запускается"""
-        print("🚀 Приложение запущено")
+        """Called when app starts"""
+        print("App started")
         if platform == 'android':
-            # Проверяем разрешения еще раз после запуска
+            # Check permissions again after startup
             Clock.schedule_once(self.check_android_permissions, 2)
 
+    def request_android_permissions(self):
+        """Request Android permissions"""
+        try:
+            print("Requesting Android permissions...")
+            from android.permissions import request_permissions, Permission, check_permission
+            
+            # Modern permissions for Android 13+
+            permissions = [
+                Permission.READ_EXTERNAL_STORAGE,
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_MEDIA_AUDIO
+            ]
+            
+            # Check and request permissions
+            granted = all(check_permission(p) for p in permissions)
+            if not granted:
+                print("Requesting permissions...")
+                request_permissions(permissions)
+                print("Permissions requested successfully")
+            else:
+                print("All permissions already granted")
+                
+        except Exception as e:
+            print(f"Permission request failed: {e}")
+
     def check_android_permissions(self, dt):
-        """Проверяем и запрашиваем разрешения если нужно"""
+        """Check and request permissions if needed"""
         try:
             from android.permissions import check_permission, Permission, request_permissions
             
@@ -434,14 +455,14 @@ class MyApp(App):
             
             for perm in permissions:
                 if not check_permission(perm):
-                    print(f"🔐 Разрешение {perm} не предоставлено, запрашиваем...")
+                    print(f"Permission {perm} not granted, requesting...")
                     request_permissions(permissions)
                     break
             else:
-                print("✅ Все разрешения предоставлены")
+                print("All permissions granted")
                 
         except Exception as e:
-            print(f"❌ Ошибка проверки разрешений: {e}")
+            print(f"Permission check error: {e}")
 
     def load_settings(self):
         """Load app settings from JSON file"""
@@ -450,12 +471,12 @@ class MyApp(App):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.sound_settings = data.get('sound_settings', {})
-                print("✅ Настройки загружены успешно")
+                print("Settings loaded successfully")
             else:
                 self.sound_settings = {}
-                print("ℹ️ Файл настроек не найден, используем настройки по умолчанию")
+                print("No settings file found, using defaults")
         except Exception as e:
-            print(f"❌ Ошибка загрузки настроек: {e}")
+            print(f"Error loading settings: {e}")
             self.sound_settings = {}
 
     def save_sound_settings(self):
@@ -477,9 +498,9 @@ class MyApp(App):
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 
-            print("💾 Настройки сохранены успешно")
+            print("Settings saved successfully")
         except Exception as e:
-            print(f"❌ Ошибка сохранения настроек: {e}")
+            print(f"Error saving settings: {e}")
 
     def clean_sound_name(self, filename):
         """Clean sound name by removing common unwanted text"""
@@ -509,47 +530,47 @@ class MyApp(App):
 
     def load_existing_sounds(self):
         """Load saved sounds with their settings"""
-        print(f"📂 Загрузка сохраненных звуков из: {self.save_dir}")
+        print(f"Loading existing sounds from: {self.save_dir}")
         
-        # Проверяем существует ли директория
+        # Check if directory exists
         if not os.path.exists(self.save_dir):
-            print(f"❌ Директория сохранения не существует: {self.save_dir}")
+            print(f"Save directory does not exist: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
-            print(f"✅ Создана директория сохранения: {self.save_dir}")
+            print(f"Created save directory: {self.save_dir}")
             return
         
-        # Проверяем файл с путями
+        # Check saved paths file
         if os.path.exists(self.save_file):
-            print(f"📖 Чтение файла сохранений: {self.save_file}")
+            print(f"Reading save file: {self.save_file}")
             with open(self.save_file, "r", encoding="utf-8") as f:
                 for line in f:
                     path = line.strip()
                     if os.path.exists(path):
-                        print(f"🎵 Добавляем звук: {path}")
+                        print(f"Adding sound: {path}")
                         self.add_sound_button(path)
                     else:
-                        print(f"❌ Файл звука не найден: {path}")
+                        print(f"Sound file not found: {path}")
         
-        # Если нет сохраненных звуков, проверяем директорию
+        # If no saved sounds, check directory
         if not self.buttons:
-            print("🔍 Сохраненных звуков не найдено, проверяем директорию...")
+            print("No saved sounds found, checking save directory...")
             if os.path.exists(self.save_dir):
                 files = os.listdir(self.save_dir)
-                print(f"📁 Файлы в save_dir: {files}")
+                print(f"Files in save_dir: {files}")
                 for filename in sorted(files):
                     if filename.lower().endswith(".mp3"):
                         sound_path = os.path.join(self.save_dir, filename)
-                        print(f"🎵 Добавляем MP3: {sound_path}")
+                        print(f"Adding MP3: {sound_path}")
                         self.add_sound_button(sound_path)
             else:
-                print("❌ Директория сохранения не существует")
+                print("Save directory doesn't exist")
 
     def add_sound_button(self, path):
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
         sound_id = os.path.splitext(filename)[0]
         
-        print(f"🎵 Загрузка звука: {filename}")
+        print(f"Loading sound: {filename}")
         
         # Look for icon with cleaned name
         icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
@@ -560,7 +581,7 @@ class MyApp(App):
         
         sound = SoundLoader.load(path)
         if sound:
-            print(f"✅ Звук загружен успешно: {filename}")
+            print(f"Sound loaded successfully: {filename}")
             btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
             
             # Load saved volume setting
@@ -570,7 +591,7 @@ class MyApp(App):
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
         else:
-            print(f"❌ Не удалось загрузить звук: {filename}")
+            print(f"Failed to load sound: {filename}")
 
     def delete_sound(self, sound_button):
         """Delete a sound and its files"""
@@ -593,9 +614,9 @@ class MyApp(App):
                             file_path = os.path.join(self.save_dir, filename)
                             try:
                                 os.remove(file_path)
-                                print(f"🗑️ Удален файл: {file_path}")
+                                print(f"Removed file: {file_path}")
                             except Exception as e:
-                                print(f"❌ Ошибка удаления файла {file_path}: {e}")
+                                print(f"Error removing file {file_path}: {e}")
                     
                     # Remove from saved paths
                     self.update_saved_paths_file()
@@ -608,7 +629,7 @@ class MyApp(App):
                     break
                     
         except Exception as e:
-            print(f"❌ Ошибка удаления звука: {e}")
+            print(f"Error deleting sound: {e}")
             self.show_error_popup("Error deleting sound")
 
     def update_saved_paths_file(self):
@@ -624,15 +645,15 @@ class MyApp(App):
                         if btn.sound_id in filename and filename.endswith('.mp3'):
                             f.write(os.path.join(self.save_dir, filename) + "\n")
                             break
-            print("💾 Файл сохраненных путей обновлен")
+            print("Saved paths file updated")
         except Exception as e:
-            print(f"❌ Ошибка обновления сохраненных путей: {e}")
+            print(f"Error updating saved paths: {e}")
 
     def open_filechooser(self, instance):
-        print("📁 Открытие файлового менеджера...")
+        print("Opening file chooser...")
         content = BoxLayout(orientation='vertical', spacing=10)
         
-        # Показываем корневую директорию для Android
+        # Show root directory for Android
         if platform == 'android':
             initial_path = "/storage/emulated/0/"
         else:
@@ -658,11 +679,11 @@ class MyApp(App):
             if filechooser.selection:
                 for path in filechooser.selection:
                     try:
-                        print(f"📄 Выбран файл: {path}")
+                        print(f"Selected file: {path}")
                         filename = os.path.basename(path)
                         new_path = os.path.join(self.save_dir, filename)
                         
-                        # Если файл уже существует, добавляем номер
+                        # If file already exists, add number
                         if os.path.exists(new_path):
                             base, ext = os.path.splitext(filename)
                             counter = 1
@@ -670,21 +691,21 @@ class MyApp(App):
                                 new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                                 counter += 1
                         
-                        # Копируем файл вместо перемещения (более безопасно)
+                        # Copy file instead of moving (more safe)
                         import shutil
                         shutil.copy2(path, new_path)
-                        print(f"✅ Файл скопирован в: {new_path}")
+                        print(f"File copied to: {new_path}")
                         
                         self.add_sound_button(new_path)
                         with open(self.save_file, "a", encoding="utf-8") as f:
                             f.write(new_path + "\n")
                             
                     except Exception as e:
-                        print(f"❌ Ошибка копирования файла: {e}")
-                        self.show_error_popup(f"Ошибка загрузки файла: {e}")
+                        print(f"File copy error: {e}")
+                        self.show_error_popup(f"File upload error: {e}")
                 popup.dismiss()
             else:
-                print("⚠️ Файл не выбран")
+                print("No file selected")
 
         select_btn.bind(on_release=select_file)
         cancel_btn.bind(on_release=lambda x: popup.dismiss())
@@ -696,7 +717,7 @@ class MyApp(App):
         
         # App info
         info_label = Label(
-            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}",
+            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}\n• Icons: {'Loaded' if os.path.exists('icon.png') else 'Missing'}",
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
@@ -758,7 +779,7 @@ class MyApp(App):
 
     def check_for_update(self):
         try:
-            print("🔍 Проверка обновлений...")
+            print("Checking for updates...")
             response = requests.get(self.UPDATE_URL, timeout=10)
             if response.status_code == 200:
                 data = response.json()
@@ -767,18 +788,18 @@ class MyApp(App):
                 changelog = data.get('changelog', '')
                 
                 if latest_version and latest_version != self.CURRENT_VERSION:
-                    print(f"🔄 Доступно обновление: {latest_version}")
+                    print(f"Update available: {latest_version}")
                     self.show_update_popup(latest_version, download_url, changelog)
                 else:
-                    print("✅ Обновлений нет")
+                    print("No updates available")
             else:
-                print(f"❌ Проверка обновлений не удалась, статус: {response.status_code}")
+                print(f"Update check failed with status: {response.status_code}")
         except requests.exceptions.RequestException as e:
-            print(f"🌐 Ошибка сети при проверке обновлений: {e}")
+            print(f"Network error during update check: {e}")
         except ValueError as e:
-            print(f"❌ Ошибка парсинга JSON: {e}")
+            print(f"JSON parsing error: {e}")
         except Exception as e:
-            print(f"❌ Неожиданная ошибка при проверке обновлений: {e}")
+            print(f"Unexpected error during update check: {e}")
 
     def show_update_popup(self, latest_version, download_url, changelog):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
