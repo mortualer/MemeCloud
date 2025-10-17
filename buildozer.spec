@@ -8,8 +8,11 @@ requirements = python3,kivy,requests,openssl,android
 orientation = portrait
 fullscreen = 0
 
-# (str) Icon of the application
-icon.filename = %(source.dir)s/icon.jpg
+# (str) Presplash of the application
+presplash.filename = %(source.dir)s/presplash.png
+
+# (str) Icon of the application  
+icon.filename = %(source.dir)s/icon.png
 
 # (str) Presplash of the application (экран загрузки)
 
