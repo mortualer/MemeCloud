@@ -340,21 +340,39 @@ class MyApp(App):
         self.load_settings()
 
     def build(self):
+        # Принудительно устанавливаем иконку
+        if os.path.exists('icon.png'):
+            self.icon = 'icon.png'
+            print("✅ Иконка приложения установлена")
+        else:
+            print("⚠️ Файл иконки не найден")
+        
         # ------------------------------
-        # Android Permissions Request
+        # Android Permissions Request - ИСПРАВЛЕННАЯ ВЕРСИЯ
         # ------------------------------
         if platform == 'android':
             try:
-                print("Requesting Android permissions...")
-                from android.permissions import request_permissions, Permission
-                request_permissions([
+                print("📋 Запрос разрешений Android...")
+                from android.permissions import request_permissions, Permission, check_permission
+                
+                # Современные разрешения для Android 13+
+                permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.MANAGE_EXTERNAL_STORAGE
-                ])
-                print("Permissions requested")
+                    Permission.READ_MEDIA_AUDIO
+                ]
+                
+                # Проверяем и запрашиваем разрешения
+                granted = all(check_permission(p) for p in permissions)
+                if not granted:
+                    print("🔐 Запрашиваем разрешения...")
+                    request_permissions(permissions)
+                    print("✅ Разрешения запрошены успешно")
+                else:
+                    print("✅ Все разрешения уже предоставлены")
+                    
             except Exception as e:
-                print(f"Permission request failed: {e}")
+                print(f"❌ Ошибка запроса разрешений: {e}")
 
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
         root = BoxLayout(orientation='vertical', spacing=10, padding=10)
@@ -396,6 +414,35 @@ class MyApp(App):
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         return root
 
+    def on_start(self):
+        """Вызывается когда приложение запускается"""
+        print("🚀 Приложение запущено")
+        if platform == 'android':
+            # Проверяем разрешения еще раз после запуска
+            Clock.schedule_once(self.check_android_permissions, 2)
+
+    def check_android_permissions(self, dt):
+        """Проверяем и запрашиваем разрешения если нужно"""
+        try:
+            from android.permissions import check_permission, Permission, request_permissions
+            
+            permissions = [
+                Permission.READ_EXTERNAL_STORAGE, 
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_MEDIA_AUDIO
+            ]
+            
+            for perm in permissions:
+                if not check_permission(perm):
+                    print(f"🔐 Разрешение {perm} не предоставлено, запрашиваем...")
+                    request_permissions(permissions)
+                    break
+            else:
+                print("✅ Все разрешения предоставлены")
+                
+        except Exception as e:
+            print(f"❌ Ошибка проверки разрешений: {e}")
+
     def load_settings(self):
         """Load app settings from JSON file"""
         try:
@@ -403,12 +450,12 @@ class MyApp(App):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.sound_settings = data.get('sound_settings', {})
-                print("Settings loaded successfully")
+                print("✅ Настройки загружены успешно")
             else:
                 self.sound_settings = {}
-                print("ℹ️ No settings file found, using defaults")
+                print("ℹ️ Файл настроек не найден, используем настройки по умолчанию")
         except Exception as e:
-            print(f" Error loading settings: {e}")
+            print(f"❌ Ошибка загрузки настроек: {e}")
             self.sound_settings = {}
 
     def save_sound_settings(self):
@@ -430,9 +477,9 @@ class MyApp(App):
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 
-            print("Settings saved successfully")
+            print("💾 Настройки сохранены успешно")
         except Exception as e:
-            print(f"Error saving settings: {e}")
+            print(f"❌ Ошибка сохранения настроек: {e}")
 
     def clean_sound_name(self, filename):
         """Clean sound name by removing common unwanted text"""
@@ -462,47 +509,47 @@ class MyApp(App):
 
     def load_existing_sounds(self):
         """Load saved sounds with their settings"""
-        print(f"Loading existing sounds from: {self.save_dir}")
+        print(f"📂 Загрузка сохраненных звуков из: {self.save_dir}")
         
         # Проверяем существует ли директория
         if not os.path.exists(self.save_dir):
-            print(f"Save directory does not exist: {self.save_dir}")
+            print(f"❌ Директория сохранения не существует: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
-            print(f"Created save directory: {self.save_dir}")
+            print(f"✅ Создана директория сохранения: {self.save_dir}")
             return
         
         # Проверяем файл с путями
         if os.path.exists(self.save_file):
-            print(f"📖 Reading save file: {self.save_file}")
+            print(f"📖 Чтение файла сохранений: {self.save_file}")
             with open(self.save_file, "r", encoding="utf-8") as f:
                 for line in f:
                     path = line.strip()
                     if os.path.exists(path):
-                        print(f"Adding sound: {path}")
+                        print(f"🎵 Добавляем звук: {path}")
                         self.add_sound_button(path)
                     else:
-                        print(f"Sound file not found: {path}")
+                        print(f"❌ Файл звука не найден: {path}")
         
         # Если нет сохраненных звуков, проверяем директорию
         if not self.buttons:
-            print("🔍 No saved sounds found, checking save directory...")
+            print("🔍 Сохраненных звуков не найдено, проверяем директорию...")
             if os.path.exists(self.save_dir):
                 files = os.listdir(self.save_dir)
-                print(f"Files in save_dir: {files}")
+                print(f"📁 Файлы в save_dir: {files}")
                 for filename in sorted(files):
                     if filename.lower().endswith(".mp3"):
                         sound_path = os.path.join(self.save_dir, filename)
-                        print(f"🎵 Adding MP3: {sound_path}")
+                        print(f"🎵 Добавляем MP3: {sound_path}")
                         self.add_sound_button(sound_path)
             else:
-                print("Save directory doesn't exist")
+                print("❌ Директория сохранения не существует")
 
     def add_sound_button(self, path):
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
         sound_id = os.path.splitext(filename)[0]
         
-        print(f"🎵 Loading sound: {filename}")
+        print(f"🎵 Загрузка звука: {filename}")
         
         # Look for icon with cleaned name
         icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
@@ -513,7 +560,7 @@ class MyApp(App):
         
         sound = SoundLoader.load(path)
         if sound:
-            print(f"Sound loaded successfully: {filename}")
+            print(f"✅ Звук загружен успешно: {filename}")
             btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
             
             # Load saved volume setting
@@ -523,7 +570,7 @@ class MyApp(App):
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
         else:
-            print(f"Failed to load sound: {filename}")
+            print(f"❌ Не удалось загрузить звук: {filename}")
 
     def delete_sound(self, sound_button):
         """Delete a sound and its files"""
@@ -546,9 +593,9 @@ class MyApp(App):
                             file_path = os.path.join(self.save_dir, filename)
                             try:
                                 os.remove(file_path)
-                                print(f" Removed file: {file_path}")
+                                print(f"🗑️ Удален файл: {file_path}")
                             except Exception as e:
-                                print(f"Error removing file {file_path}: {e}")
+                                print(f"❌ Ошибка удаления файла {file_path}: {e}")
                     
                     # Remove from saved paths
                     self.update_saved_paths_file()
@@ -561,7 +608,7 @@ class MyApp(App):
                     break
                     
         except Exception as e:
-            print(f"Error deleting sound: {e}")
+            print(f"❌ Ошибка удаления звука: {e}")
             self.show_error_popup("Error deleting sound")
 
     def update_saved_paths_file(self):
@@ -577,12 +624,12 @@ class MyApp(App):
                         if btn.sound_id in filename and filename.endswith('.mp3'):
                             f.write(os.path.join(self.save_dir, filename) + "\n")
                             break
-            print("Saved paths file updated")
+            print("💾 Файл сохраненных путей обновлен")
         except Exception as e:
-            print(f"Error updating saved paths: {e}")
+            print(f"❌ Ошибка обновления сохраненных путей: {e}")
 
     def open_filechooser(self, instance):
-        print("Opening file chooser...")
+        print("📁 Открытие файлового менеджера...")
         content = BoxLayout(orientation='vertical', spacing=10)
         
         # Показываем корневую директорию для Android
@@ -611,7 +658,7 @@ class MyApp(App):
             if filechooser.selection:
                 for path in filechooser.selection:
                     try:
-                        print(f"📄 Selected file: {path}")
+                        print(f"📄 Выбран файл: {path}")
                         filename = os.path.basename(path)
                         new_path = os.path.join(self.save_dir, filename)
                         
@@ -626,17 +673,18 @@ class MyApp(App):
                         # Копируем файл вместо перемещения (более безопасно)
                         import shutil
                         shutil.copy2(path, new_path)
-                        print(f"File copied to: {new_path}")
+                        print(f"✅ Файл скопирован в: {new_path}")
                         
                         self.add_sound_button(new_path)
                         with open(self.save_file, "a", encoding="utf-8") as f:
                             f.write(new_path + "\n")
                             
                     except Exception as e:
-                        print(f"File copy error: {e}")
+                        print(f"❌ Ошибка копирования файла: {e}")
+                        self.show_error_popup(f"Ошибка загрузки файла: {e}")
                 popup.dismiss()
             else:
-                print(" No file selected")
+                print("⚠️ Файл не выбран")
 
         select_btn.bind(on_release=select_file)
         cancel_btn.bind(on_release=lambda x: popup.dismiss())
@@ -710,7 +758,7 @@ class MyApp(App):
 
     def check_for_update(self):
         try:
-            print("🔍 Checking for updates...")
+            print("🔍 Проверка обновлений...")
             response = requests.get(self.UPDATE_URL, timeout=10)
             if response.status_code == 200:
                 data = response.json()
@@ -719,18 +767,18 @@ class MyApp(App):
                 changelog = data.get('changelog', '')
                 
                 if latest_version and latest_version != self.CURRENT_VERSION:
-                    print(f"Update available: {latest_version}")
+                    print(f"🔄 Доступно обновление: {latest_version}")
                     self.show_update_popup(latest_version, download_url, changelog)
                 else:
-                    print("No updates available")
+                    print("✅ Обновлений нет")
             else:
-                print(f" Update check failed with status: {response.status_code}")
+                print(f"❌ Проверка обновлений не удалась, статус: {response.status_code}")
         except requests.exceptions.RequestException as e:
-            print(f"🌐 Network error during update check: {e}")
+            print(f"🌐 Ошибка сети при проверке обновлений: {e}")
         except ValueError as e:
-            print(f"JSON parsing error: {e}")
+            print(f"❌ Ошибка парсинга JSON: {e}")
         except Exception as e:
-            print(f"Unexpected error during update check: {e}")
+            print(f"❌ Неожиданная ошибка при проверке обновлений: {e}")
 
     def show_update_popup(self, latest_version, download_url, changelog):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
