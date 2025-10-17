@@ -95,8 +95,8 @@ jobs:
           echo "sdkmanager: $(which sdkmanager)"
           echo "aidl exists: $(ls -la $ANDROID_HOME/build-tools/33.0.2/aidl 2>/dev/null && echo 'YES' || echo 'NO')"
           
-          # Build the APK
-          buildozer -v android debug 2>&1 | tee build_output.log
+          # Build the APK - ИЗМЕНЕНИЕ ЗДЕСЬ: debug → release
+          buildozer -v android release 2>&1 | tee build_output.log
 
       - name: 📤 Collect APK files
         run: |
