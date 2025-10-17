@@ -5,5 +5,11 @@
   "release_notes": "## What's New in MemeCloud 1.2.0\n\n### New Features:\n- **Individual Volume Control**: Adjust volume for each sound separately\n- **Delete Sounds**: Remove unwanted sounds with confirmation dialog\n- **Settings Menu**: Access app info and GitHub repository\n- **Auto-Save**: Volume settings are saved automatically\n\n### Improvements:\n- Enhanced expanded sound view with larger controls\n- Better file management and error handling\n- Improved performance and memory usage\n- More intuitive user interface\n\n### Bug Fixes:\n- Fixed sound playback issues\n- Improved compatibility with different Android versions\n- Better handling of file permissions\n\nUpdate now to enjoy these new features!",
   "min_required_version": "1.0.0",
   "release_date": "2024-01-15",
-  "file_size": "15872940"
+  "file_size": "15872940",
+  "supported_architectures": [
+    "arm64-v8a (recommended for most devices)",
+    "armeabi-v7a (for older devices)", 
+    "x86_64 (for emulators)"
+  ],
+  "installation_notes": "Download the arm64-v8a version for most modern Android devices. For older devices, use armeabi-v7a version."
 }
