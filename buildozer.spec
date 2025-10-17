@@ -24,7 +24,6 @@ android.sdk = 24
 android.ndk = 25b
 android.private_storage = True
 android.arch = arm64-v8a
-android.archs = arm64-v8a
 p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
