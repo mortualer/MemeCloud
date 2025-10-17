@@ -419,10 +419,9 @@ class MyApp(App):
         )
         
         def download_update(instance):
-            if download_url:
-                print(f"Opening download URL: {download_url}")
-                webbrowser.open(download_url)
-            popup.dismiss()
+    # Открываем страницу релизов GitHub вместо прямой ссылки на APK
+    webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
+    popup.dismiss()
         
         update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
