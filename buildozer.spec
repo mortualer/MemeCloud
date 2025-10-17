@@ -3,7 +3,7 @@ title = MemeCloud
 package.name = memecloud
 package.domain = org.mortualer
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf,json
+source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
 version = 1.2.0
 requirements = python3,kivy,requests,openssl,android
 orientation = portrait
@@ -12,13 +12,13 @@ fullscreen = 0
 [buildozer]
 log_level = 2
 
-# Иконки
-icon.filename = %(source.dir)s/icon.png
-android.adaptive_icon_foreground = %(source.dir)s/icon-foreground.png
-android.adaptive_icon_background = %(source.dir)s/icon-background.png
+# Иконки - убедитесь что файлы существуют
+icon.filename = icon.png
+android.adaptive_icon_foreground = icon-foreground.png  
+android.adaptive_icon_background = icon-background.png
 
 # Заставка
-presplash.filename = %(source.dir)s/icon.png
+presplash.filename = icon.png
 
 # Android настройки
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
@@ -32,5 +32,9 @@ p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
 
-# ВАЖНО: Отключаем AAB, собираем только APK
+# Отключаем AAB, собираем только APK
 android.aab = False
+
+# Дополнительные настройки для иконок
+android.adaptive_icon = True
+android.icon_extension = .png
