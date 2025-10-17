@@ -31,4 +31,6 @@ android.arch = arm64-v8a
 p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
-android.release_artifact = True
+
+# ВАЖНО: Отключаем AAB, собираем только APK
+android.aab = False
