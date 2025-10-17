@@ -79,10 +79,10 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
-      - name: 🏗️ Build AAB
+      - name: 🏗️ Build REAL APK
         run: |
           set -e
-          echo "🚀 Starting AAB build process..."
+          echo "🚀 Building real APK (not AAB conversion)..."
           
           # Set environment variables
           export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
@@ -92,111 +92,61 @@ jobs:
           echo "=== Final Environment Check ==="
           echo "ANDROID_HOME: $ANDROID_HOME"
           echo "Java: $(java -version 2>&1 | head -1)"
+          echo "sdkmanager: $(which sdkmanager)"
           
-          # Собираем AAB (это работает надежно)
-          echo "📦 Building AAB file..."
-          buildozer android release
-
-      - name: 🔄 Convert AAB to APK
-        run: |
-          set -e
-          echo "🔄 Converting AAB to APK..."
+          # Сначала пробуем собрать debug APK (более надежно)
+          echo "📱 Building DEBUG APK..."
+          buildozer -v android debug
           
-          # Создаем debug.keystore если его нет
-          echo "🔑 Creating debug.keystore..."
-          keytool -genkey -v -keystore debug.keystore \
-            -alias androiddebugkey -storepass android -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-          
-          # Скачиваем bundletool
-          wget -q https://github.com/google/bundletool/releases/download/1.15.6/bundletool-all-1.15.6.jar
-          
-          # Ищем AAB файл
-          AAB_FILE=$(find . -name "*.aab" | head -1)
-          
-          if [ -z "$AAB_FILE" ]; then
-            echo "❌ No AAB file found!"
-            exit 1
-          fi
-          
-          echo "📦 Found AAB file: $AAB_FILE"
-          
-          # Создаем device spec для универсального APK
-          cat > device-spec.json << 'EOF'
-          {
-            "supportedAbis": ["arm64-v8a", "armeabi-v7a"],
-            "supportedLocales": ["en", "ru"],
-            "screenDensity": 420,
-            "sdkVersion": 21
-          }
-          EOF
-          
-          # Создаем универсальный APK из AAB
-          echo "📱 Building universal APK from AAB..."
-          java -jar bundletool-all-1.15.6.jar build-apks \
-            --bundle="$AAB_FILE" \
-            --output=./temp.apks \
-            --mode=universal \
-            --ks=debug.keystore \
-            --ks-pass=pass:android \
-            --ks-key-alias=androiddebugkey \
-            --key-pass=pass:android
-          
-          # Извлекаем APK из apks архива
-          echo "📤 Extracting APK from bundle..."
-          unzip -q ./temp.apks -d ./extracted_apks/
-          
-          # Ищем универсальный APK
-          UNIVERSAL_APK=$(find ./extracted_apks -name "*.apk" | head -1)
-          
-          if [ -n "$UNIVERSAL_APK" ]; then
-            # Переименовываем APK
-            APK_NAME="memecloud-1.2.0-universal-release.apk"
-            mv "$UNIVERSAL_APK" "./$APK_NAME"
-            echo "✅ Successfully converted AAB to APK: $APK_NAME"
-            echo "📊 APK file details:"
-            ls -la "./$APK_NAME"
+          # Проверяем результат
+          if find ./bin -name "*-debug.apk" | grep -q .; then
+            echo "✅ DEBUG APK built successfully!"
           else
-            echo "❌ Failed to extract APK from AAB"
-            echo "Contents of extracted_apks:"
-            ls -la ./extracted_apks/
-            exit 1
+            echo "🔄 Debug failed, trying RELEASE APK..."
+            buildozer -v android release
           fi
-          
-          # Очистка временных файлов
-          echo "🧹 Cleaning temporary files..."
-          rm -f bundletool-all-1.15.6.jar
-          rm -f device-spec.json
-          rm -f temp.apks
-          rm -rf extracted_apks
-          rm -f debug.keystore
 
       - name: 📤 Collect APK files
         run: |
           mkdir -p artifacts
-          echo "🔎 Collecting APK files..."
+          echo "🔎 Searching for APK files..."
           
-          # Копируем APK файлы
-          find . -name "*.apk" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          # Очищаем artifacts
+          rm -rf artifacts/*
           
-          # Также копируем AAB для справки
-          find . -name "*.aab" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          # Ищем все APK файлы
+          echo "📁 Searching in bin directory:"
+          ls -la ./bin/ 2>/dev/null || echo "No bin directory"
+          
+          # Копируем все APK файлы
+          find ./bin -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find . -name "*-debug.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find . -name "*-release.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          find . -name "memecloud*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+          
+          # Детальная проверка
+          echo "🔍 Detailed search:"
+          find . -name "*.apk" -exec ls -la {} \; 2>/dev/null || true
           
           APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
-          AAB_COUNT=$(find artifacts -name "*.aab" 2>/dev/null | wc -l)
-          
-          echo "📊 Results:"
-          echo "   APK files: $APK_COUNT"
-          echo "   AAB files: $AAB_COUNT"
+          echo "📊 Found $APK_COUNT APK file(s)"
           
           if [ "$APK_COUNT" -eq "0" ]; then
-            echo "❌ No APK files found after conversion"
+            echo "❌ No APK files found!"
+            echo "Checking for any build outputs:"
+            find . -name "*.aab" -exec ls -la {} \; 2>/dev/null || true
+            echo "Build failed - no APK output" > artifacts/error.txt
             exit 1
           else
             echo "✅ SUCCESS: APK files created!"
-            echo "📁 Contents of artifacts directory:"
+            echo "📋 APK files in artifacts:"
             ls -la artifacts/
+            
+            # Показываем информацию о APK
+            for apk in artifacts/*.apk; do
+              echo "📱 APK Info: $apk"
+              file "$apk" || true
+            done
           fi
 
       - name: 📋 Save build logs
@@ -209,10 +159,15 @@ jobs:
           echo "APK files: $(find artifacts -name "*.apk" 2>/dev/null | wc -l)" >> logs/build_summary.log
           echo "AAB files: $(find artifacts -name "*.aab" 2>/dev/null | wc -l)" >> logs/build_summary.log
           
+          # Копируем все логи
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
           
-          echo "📄 Log files:"
+          # Создаем список файлов в проекте для отладки
+          echo "📁 Project structure:" > logs/project_structure.log
+          find . -type f -name "*.py" -o -name "*.png" -o -name "*.jpg" -o -name "*.spec" | head -50 >> logs/project_structure.log
+          
+          echo "📄 Log files saved:"
           ls -la logs/
 
       - name: 🚀 Upload APK Artifact
