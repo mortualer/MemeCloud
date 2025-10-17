@@ -13,7 +13,9 @@ fullscreen = 0
 log_level = 2
 warn_on_root = 1
 
-icon.filename = %(source.dir)s/icon.jpg
+icon.filename = %(source.dir)s/icon.png
+android.adaptive_icon_foreground= %(source.dir)s/icon-foreground.png
+android.adaptive_icon_background= %(source.dir)s/icon-background.png
 
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
@@ -26,3 +28,5 @@ android.archs = arm64-v8a
 p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
+
+android.release_artifact = True
