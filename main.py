@@ -21,7 +21,7 @@ from kivy.utils import platform
 # SoundButton Class
 # -------------------------
 class SoundButton(BoxLayout):
-    current_button = None # Currently playing button
+    current_button = None  # Currently playing button
 
     def __init__(self, text, sound, icon_path=None, app=None, **kwargs):
         super().__init__(**kwargs)
@@ -227,7 +227,7 @@ class MyApp(App):
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=175,
+        self.upload_button = Button(text="Upload Sound", size_hint=(None, 1), width=175,
                                     background_color=(0.5, 0.8, 0.5, 1), color=(1, 1, 1, 1))
         self.upload_button.bind(on_release=self.open_filechooser)
         top_bar.add_widget(self.upload_button)
@@ -244,6 +244,32 @@ class MyApp(App):
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         return root
 
+    def clean_sound_name(self, filename):
+        """Clean sound name by removing common unwanted text"""
+        # Remove file extension
+        name = os.path.splitext(filename)[0]
+        
+        # Remove common unwanted phrases
+        unwanted_phrases = [
+            "Sound Button", "sound button", "SoundButton", "soundbutton",
+            "Sound", "sound", "Button", "button", "MP3", "mp3"
+        ]
+        
+        for phrase in unwanted_phrases:
+            name = name.replace(phrase, "")
+        
+        # Clean up extra spaces and underscores
+        name = name.replace("_", " ").replace("-", " ").strip()
+        
+        # Remove extra spaces
+        name = " ".join(name.split())
+        
+        # If name is empty after cleaning, use original filename
+        if not name:
+            name = os.path.splitext(filename)[0]
+            
+        return name
+
     # Load saved sounds
     def load_existing_sounds(self):
         if os.path.exists(self.save_file):
@@ -258,8 +284,16 @@ class MyApp(App):
                     self.add_sound_button(os.path.join(self.save_dir, filename))
 
     def add_sound_button(self, path):
-        btn_text = os.path.splitext(os.path.basename(path))[0]
-        icon_file = os.path.join(os.path.dirname(path), btn_text + ".png")
+        filename = os.path.basename(path)
+        btn_text = self.clean_sound_name(filename)
+        
+        # Look for icon with cleaned name
+        icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
+        
+        # If icon doesn't exist, try with original filename
+        if not os.path.exists(icon_file):
+            icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
+        
         sound = SoundLoader.load(path)
         btn_widget = SoundButton(btn_text, sound, icon_file, app=self)
         self.layout.add_widget(btn_widget)
@@ -307,9 +341,9 @@ class MyApp(App):
     def toggle_pin(self, instance):
         self.pin_active = not self.pin_active
         if self.pin_active:
-            instance.background_color = (0.15, 0.25, 0.45, 1) # dark
+            instance.background_color = (0.15, 0.25, 0.45, 1)  # dark
         else:
-            instance.background_color = (0.3, 0.8, 0.3, 1) # green
+            instance.background_color = (0.3, 0.8, 0.3, 1)  # green
 
         for btn in self.buttons:
             if btn.is_expanded:
@@ -392,86 +426,6 @@ class MyApp(App):
         
         update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-    def download_and_install(self, url):
-        """Extended function for downloading and installing (optional)"""
-        if platform == 'android':
-            try:
-                # Request permissions
-                from android.permissions import request_permissions, Permission
-                request_permissions([Permission.WRITE_EXTERNAL_STORAGE])
-                
-                # Download APK
-                import urllib.request
-                from jnius import cast
-                
-                apk_path = os.path.join(self.save_dir, "update.apk")
-                
-                # Show download progress
-                self.show_download_progress(url, apk_path)
-                
-            except Exception as e:
-                print(f"Auto-install failed: {e}")
-                # Fallback - open in browser
-                webbrowser.open(url)
-        else:
-            # On other platforms just open the link
-            webbrowser.open(url)
-
-    def show_download_progress(self, url, apk_path):
-        """Show download progress"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        progress_label = Label(text="Downloading update...")
-        content.add_widget(progress_label)
-        
-        popup = Popup(title="Downloading", content=content, size_hint=(0.6, 0.3))
-        popup.open()
-        
-        def download_thread():
-            try:
-                import urllib.request
-                urllib.request.urlretrieve(url, apk_path)
-                Clock.schedule_once(lambda dt: self.install_apk(apk_path, popup))
-            except Exception as e:
-                Clock.schedule_once(lambda dt: self.download_failed(e, popup))
-        
-        import threading
-        threading.Thread(target=download_thread).start()
-
-    def install_apk(self, apk_path, popup):
-        """Install APK on Android"""
-        try:
-            from jnius import autoclass
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            Context = autoclass('android.content.Context')
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(Uri.fromFile(File(apk_path)), "application/vnd.android.package-archive")
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            PythonActivity.mActivity.startActivity(intent)
-            
-            popup.dismiss()
-        except Exception as e:
-            print(f"Install failed: {e}")
-            popup.dismiss()
-            webbrowser.open(apk_path)
-
-    def download_failed(self, error, popup):
-        popup.dismiss()
-        self.show_error_popup(f"Download error: {error}")
-
-    def show_error_popup(self, message):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text=message))
-        ok_btn = Button(text="OK", size_hint_y=None, height=50)
-        content.add_widget(ok_btn)
-        
-        popup = Popup(title="Error", content=content, size_hint=(0.6, 0.3))
-        ok_btn.bind(on_release=popup.dismiss)
         popup.open()
 
 
