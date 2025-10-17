@@ -79,7 +79,7 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
-      - name: 🏗️ Build APK
+      - name: 🏗️ Build APK (Debug - для тестирования)
         run: |
           set -e
           echo "🚀 Starting APK build process..."
@@ -95,8 +95,25 @@ jobs:
           echo "sdkmanager: $(which sdkmanager)"
           echo "aidl exists: $(ls -la $ANDROID_HOME/build-tools/33.0.2/aidl 2>/dev/null && echo 'YES' || echo 'NO')"
           
-          # Build the APK - ИЗМЕНЕНИЕ ЗДЕСЬ: debug → release
-          buildozer android release 2>&1 | tee build_output.log
+          # Clean previous builds
+          buildozer android clean
+          
+          # Build debug version first (более стабильная сборка)
+          buildozer -v android debug
+
+      - name: 🔍 Check build errors
+        if: always()
+        run: |
+          echo "=== Checking for build errors ==="
+          if [ -f "build_output.log" ]; then
+            echo "Last 50 lines of build output:"
+            tail -50 build_output.log
+            echo ""
+            echo "=== ERRORS FOUND ==="
+            grep -i "error\|failed\|exception" build_output.log | tail -20 || echo "No errors found"
+          else
+            echo "No build_output.log found"
+          fi
 
       - name: 📤 Collect APK files
         run: |
@@ -117,6 +134,9 @@ jobs:
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
             echo "Build failed" > artifacts/debug-info.txt
+            # Show what's in bin directory
+            echo "Contents of bin directory:"
+            ls -la ./bin/ 2>/dev/null || echo "No bin directory"
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
@@ -128,11 +148,18 @@ jobs:
           mkdir -p logs
           echo "💾 Saving build logs..."
           
-          cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
+          # Save main build log
+          if [ -f "build_output.log" ]; then
+            cp build_output.log logs/
+          else
+            echo "No build_output.log found" > logs/no_build_log.txt
+          fi
+          
+          # Save other logs
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
           
-          echo "📄 Log files:"
+          echo "📄 Log files saved:"
           ls -la logs/
 
       - name: 🚀 Upload APK Artifact
@@ -151,3 +178,20 @@ jobs:
           path: logs/
           retention-days: 7
           if-no-files-found: warn
+
+      - name: 📊 Build Summary
+        if: always()
+        run: |
+          echo "=== BUILD SUMMARY ==="
+          if [ -f "artifacts/debug-info.txt" ]; then
+            echo "❌ BUILD FAILED"
+            echo "Check Build-Logs artifact for details"
+          else
+            APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
+            if [ "$APK_COUNT" -gt "0" ]; then
+              echo "✅ BUILD SUCCESSFUL"
+              echo "Generated $APK_COUNT APK file(s)"
+            else
+              echo "⚠️ BUILD COMPLETED BUT NO APK FOUND"
+            fi
+          fi
