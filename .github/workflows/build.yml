@@ -95,11 +95,9 @@ jobs:
           echo "sdkmanager: $(which sdkmanager)"
           echo "aidl exists: $(ls -la $ANDROID_HOME/build-tools/33.0.2/aidl 2>/dev/null && echo 'YES' || echo 'NO')"
           
-          # Build the APK - Очистка и принудительная сборка APK
-          buildozer android clean
-          buildozer -v android release
-          # Если не сработает, попробуйте:
-          # buildozer -v android release -- --package-type apk
+          # Простая сборка без clean (из-за ошибки clean_builds)
+          echo "📱 Building APK directly (skipping clean)..."
+          buildozer android release
 
       - name: 📤 Collect APK files
         run: |
@@ -114,20 +112,22 @@ jobs:
             echo "📁 Contents of bin directory:"
             ls -la ./bin/
             find ./bin -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+            find ./bin -name "*.aab" -exec cp {} artifacts/ \; 2>/dev/null || true
           fi
           
           if [ -d "./.buildozer" ]; then
             find ./.buildozer -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
+            find ./.buildozer -name "*.aab" -exec cp {} artifacts/ \; 2>/dev/null || true
           fi
           
           APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
-          if [ "$APK_COUNT" -eq "0" ]; then
-            echo "❌ No APK files found"
-            echo "Checking for AAB files:"
-            find . -name "*.aab" -type f -exec ls -la {} \; 2>/dev/null || true
-            echo "Build failed - no APK" > artifacts/debug-info.txt
+          AAB_COUNT=$(find artifacts -name "*.aab" 2>/dev/null | wc -l)
+          
+          if [ "$APK_COUNT" -eq "0" ] && [ "$AAB_COUNT" -eq "0" ]; then
+            echo "❌ No APK/AAB files found"
+            echo "Build failed - no output files" > artifacts/debug-info.txt
           else
-            echo "✅ Found $APK_COUNT APK file(s)"
+            echo "✅ Found $APK_COUNT APK file(s) and $AAB_COUNT AAB file(s)"
             ls -la artifacts/
           fi
 
@@ -137,7 +137,13 @@ jobs:
           mkdir -p logs
           echo "💾 Saving build logs..."
           
-          cp build_output.log logs/ 2>/dev/null || echo "No build_output.log" > logs/no_logs.txt
+          # Создаем минимальный лог если основного нет
+          if [ ! -f "build_output.log" ]; then
+            echo "No build_output.log - build may have completed silently" > logs/build_summary.log
+          else
+            cp build_output.log logs/ 2>/dev/null || true
+          fi
+          
           find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
           cp buildozer.spec logs/ 2>/dev/null || true
           
