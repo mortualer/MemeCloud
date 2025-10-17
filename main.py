@@ -227,7 +227,7 @@ class MyApp(App):
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        self.upload_button = Button(text="Upload Sound", size_hint=(None, 1), width=175,
+        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=175,
                                     background_color=(0.5, 0.8, 0.5, 1), color=(1, 1, 1, 1))
         self.upload_button.bind(on_release=self.open_filechooser)
         top_bar.add_widget(self.upload_button)
