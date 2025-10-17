@@ -1,5 +1,5 @@
 {
   "version": "1.0.0",
-  "download_url": "https://github.com/mortualer/SoundCloud/releases",
-  "changelog": "Initial release with sound playback and upload features"
+  "download_url": "https://github.com/mortualer/MemeCloud/releases/latest",
+  "changelog": "• Initial release\n• Play sound memes\n• Upload MP3 files\n• Search and filter sounds\n• Drag and drop reordering\n• Pin expanded sounds"
 }
