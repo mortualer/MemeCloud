@@ -80,10 +80,10 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
-      - name: 🏗️ Build APK (Debug - для тестирования)
+      - name: 🏗️ Build APK (Release версия)
         run: |
           set -e
-          echo "🚀 Starting APK build process..."
+          echo "🚀 Starting RELEASE APK build process..."
           
           # Set environment variables
           export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
@@ -99,8 +99,8 @@ jobs:
           # Clean previous builds
           buildozer android clean
           
-          # Build debug version first (более стабильная сборка)
-          buildozer -v android debug
+          # Build RELEASE version
+          buildozer -v android release
 
       - name: 🔍 Check build errors
         if: always()
@@ -192,6 +192,8 @@ jobs:
             if [ "$APK_COUNT" -gt "0" ]; then
               echo "✅ BUILD SUCCESSFUL"
               echo "Generated $APK_COUNT APK file(s)"
+              echo "APK files:"
+              find artifacts -name "*.apk" -exec echo "  - {}" \;
             else
               echo "⚠️ BUILD COMPLETED BUT NO APK FOUND"
             fi
