@@ -13,14 +13,11 @@ from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
 from kivy.uix.slider import Slider
-from kivy.uix.switch import Switch
-from kivy.uix.progressbar import ProgressBar
 import os
 import requests
 import webbrowser
 import json
 from kivy.utils import platform
-from kivy.storage.jsonstore import JsonStore
 
 # -------------------------
 # SoundButton Class
@@ -42,6 +39,7 @@ class SoundButton(BoxLayout):
         self.is_expanded = False
         self.pinned = False
         self.volume = 1.0  # Default volume
+        self.original_icon_path = icon_path  # Save icon path for restoration
 
         # Background and shadow
         with self.canvas.before:
@@ -52,9 +50,13 @@ class SoundButton(BoxLayout):
             self.bg_color = Color(0.25, 0.25, 0.35, 1)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
 
+        # Store original widgets for restoration
+        self.original_widgets = []
+        
         if icon_path and os.path.exists(icon_path):
-            icon = Image(source=icon_path, size_hint=(None, 1), width=50)
-            self.add_widget(icon)
+            self.icon_widget = Image(source=icon_path, size_hint=(None, 1), width=50)
+            self.original_widgets.append(self.icon_widget)
+            self.add_widget(self.icon_widget)
 
         # Button
         self.button = Button(
@@ -69,6 +71,7 @@ class SoundButton(BoxLayout):
         self.button.text_size = (None, None)
         self.button.bind(on_press=self.play_sound)
         self.button.bind(on_touch_down=self.start_long_press, on_touch_up=self.end_long_press)
+        self.original_widgets.append(self.button)
         self.add_widget(self.button)
 
         self.bind(pos=self.update_rect, size=self.update_rect)
@@ -141,62 +144,74 @@ class SoundButton(BoxLayout):
         self.clear_widgets()
         
         # Main expanded layout
-        expanded_layout = BoxLayout(orientation='vertical', spacing=10, padding=20)
+        expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
         
         # Title
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
-            height=60,
-            font_size='20sp',
+            height=80,
+            font_size='24sp',
             bold=True,
             color=(1, 1, 1, 1)
         )
         expanded_layout.add_widget(title_label)
         
         # Volume control
-        volume_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=10)
-        volume_label = Label(text='Volume:', size_hint_x=None, width=80, color=(1, 1, 1, 1))
+        volume_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=60, spacing=15)
+        volume_label = Label(text='Volume:', size_hint_x=None, width=100, color=(1, 1, 1, 1), font_size='18sp')
         volume_layout.add_widget(volume_label)
         
         self.volume_slider = Slider(min=0, max=1, value=self.volume, size_hint_x=1)
         self.volume_slider.bind(value=self.on_volume_change)
         volume_layout.add_widget(self.volume_slider)
         
+        # Volume value label
+        self.volume_value = Label(text=f'{int(self.volume * 100)}%', size_hint_x=None, width=60, 
+                                 color=(1, 1, 1, 1), font_size='16sp')
+        volume_layout.add_widget(self.volume_value)
+        
         expanded_layout.add_widget(volume_layout)
         
         # Play button
         play_btn = Button(
-            text='Play Sound',
+            text='▶ PLAY SOUND',
             size_hint_y=None,
-            height=80,
+            height=100,
             background_color=(0.3, 0.8, 0.3, 1),
-            color=(1, 1, 1, 1)
+            color=(1, 1, 1, 1),
+            font_size='20sp',
+            bold=True
         )
         play_btn.bind(on_press=self.play_sound)
         expanded_layout.add_widget(play_btn)
         
+        # Button layout
+        btn_layout = BoxLayout(size_hint_y=None, height=80, spacing=15)
+        
         # Delete button
         delete_btn = Button(
-            text='Delete Sound',
-            size_hint_y=None,
-            height=60,
+            text='DELETE',
+            size_hint_x=0.6,
             background_color=(0.8, 0.3, 0.3, 1),
-            color=(1, 1, 1, 1)
+            color=(1, 1, 1, 1),
+            font_size='16sp'
         )
         delete_btn.bind(on_press=self.delete_sound)
-        expanded_layout.add_widget(delete_btn)
+        btn_layout.add_widget(delete_btn)
         
         # Close button
         close_btn = Button(
-            text='Close',
-            size_hint_y=None,
-            height=60,
+            text='CLOSE',
+            size_hint_x=0.4,
             background_color=(0.5, 0.5, 0.7, 1),
-            color=(1, 1, 1, 1)
+            color=(1, 1, 1, 1),
+            font_size='16sp'
         )
         close_btn.bind(on_press=lambda x: self.collapse())
-        expanded_layout.add_widget(close_btn)
+        btn_layout.add_widget(close_btn)
+        
+        expanded_layout.add_widget(btn_layout)
         
         self.add_widget(expanded_layout)
 
@@ -204,6 +219,9 @@ class SoundButton(BoxLayout):
         self.volume = value
         if self.sound:
             self.sound.volume = value
+        # Update volume percentage
+        if hasattr(self, 'volume_value'):
+            self.volume_value.text = f'{int(value * 100)}%'
         # Save volume setting
         if self.app:
             self.app.save_sound_settings()
@@ -243,28 +261,9 @@ class SoundButton(BoxLayout):
     def restore_original_view(self):
         self.clear_widgets()
         
-        # Recreate original button view
-        icon_path = None
-        if hasattr(self, 'original_icon_path'):
-            icon_path = self.original_icon_path
-            
-        if icon_path and os.path.exists(icon_path):
-            icon = Image(source=icon_path, size_hint=(None, 1), width=50)
-            self.add_widget(icon)
-
-        self.button = Button(
-            text=self.btn_text,
-            size_hint=(1, 1),
-            background_normal='',
-            background_color=(0, 0, 0, 0),
-            color=(1, 1, 1, 1),
-            halign="center",
-            valign="middle"
-        )
-        self.button.text_size = (None, None)
-        self.button.bind(on_press=self.play_sound)
-        self.button.bind(on_touch_down=self.start_long_press, on_touch_up=self.end_long_press)
-        self.add_widget(self.button)
+        # Restore original widgets
+        for widget in self.original_widgets:
+            self.add_widget(widget)
 
     def stop_sound_and_collapse(self):
         if self.sound:
@@ -374,9 +373,9 @@ class MyApp(App):
         top_bar.add_widget(self.upload_button)
 
         # Settings button
-        self.settings_button = Button(text="⚙", size_hint=(None, 1), width=60,
-                                     background_color=(0.4, 0.4, 0.6, 1), color=(1, 1, 1, 1),
-                                     font_size='18sp')
+        self.settings_button = Button(text="i", size_hint=(None, 1), width=60,
+                             background_color=(0.4, 0.4, 0.6, 1), color=(1, 1, 1, 1),
+                             font_size='18sp', bold=True)
         self.settings_button.bind(on_release=self.open_settings)
         top_bar.add_widget(self.settings_button)
 
@@ -707,7 +706,7 @@ class MyApp(App):
         )
         
         def download_update(instance):
-            # Открываем страницу релизов GitHub вместо прямой ссылки на APK
+            # Open latest releases page
             webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
             popup.dismiss()
         
