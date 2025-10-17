@@ -34,4 +34,4 @@ android.allow_backup = True
 android.release_artifact = True
 
 # ВАЖНО: Принудительно отключить AAB
-android.aab = no
+android.aab = yes
