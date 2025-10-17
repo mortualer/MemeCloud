@@ -102,6 +102,13 @@ jobs:
           set -e
           echo "🔄 Converting AAB to APK..."
           
+          # Создаем debug.keystore если его нет
+          echo "🔑 Creating debug.keystore..."
+          keytool -genkey -v -keystore debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          
           # Скачиваем bundletool
           wget -q https://github.com/google/bundletool/releases/download/1.15.6/bundletool-all-1.15.6.jar
           
@@ -126,6 +133,7 @@ jobs:
           EOF
           
           # Создаем универсальный APK из AAB
+          echo "📱 Building universal APK from AAB..."
           java -jar bundletool-all-1.15.6.jar build-apks \
             --bundle="$AAB_FILE" \
             --output=./temp.apks \
@@ -136,6 +144,7 @@ jobs:
             --key-pass=pass:android
           
           # Извлекаем APK из apks архива
+          echo "📤 Extracting APK from bundle..."
           unzip -q ./temp.apks -d ./extracted_apks/
           
           # Ищем универсальный APK
@@ -143,20 +152,25 @@ jobs:
           
           if [ -n "$UNIVERSAL_APK" ]; then
             # Переименовываем APK
-            APK_NAME=$(basename "$AAB_FILE" .aab).apk
+            APK_NAME="memecloud-1.2.0-universal-release.apk"
             mv "$UNIVERSAL_APK" "./$APK_NAME"
             echo "✅ Successfully converted AAB to APK: $APK_NAME"
+            echo "📊 APK file details:"
             ls -la "./$APK_NAME"
           else
             echo "❌ Failed to extract APK from AAB"
+            echo "Contents of extracted_apks:"
+            ls -la ./extracted_apks/
             exit 1
           fi
           
           # Очистка временных файлов
+          echo "🧹 Cleaning temporary files..."
           rm -f bundletool-all-1.15.6.jar
           rm -f device-spec.json
           rm -f temp.apks
           rm -rf extracted_apks
+          rm -f debug.keystore
 
       - name: 📤 Collect APK files
         run: |
@@ -181,6 +195,7 @@ jobs:
             exit 1
           else
             echo "✅ SUCCESS: APK files created!"
+            echo "📁 Contents of artifacts directory:"
             ls -la artifacts/
           fi
 
