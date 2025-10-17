@@ -28,13 +28,30 @@ jobs:
             cmake libffi-dev libssl-dev \
             curl wget unzip
 
+      - name: 🔧 Force Java 17 for entire system
+        run: |
+          # Устанавливаем Java 17 как системную по умолчанию
+          sudo update-alternatives --set java /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/temurin-17-jdk-amd64/bin/javac
+          
+          # Удаляем Java 11 из PATH чтобы Buildozer не мог ее найти
+          sudo update-alternatives --remove java /usr/lib/jvm/temurin-11-jdk-amd64/bin/java 2>/dev/null || true
+          sudo update-alternatives --remove javac /usr/lib/jvm/temurin-11-jdk-amd64/bin/javac 2>/dev/null || true
+          
+          echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
+          
+          echo "=== Java Version Check ==="
+          java -version
+          javac -version
+          echo "JAVA_HOME: $JAVA_HOME"
+
       - name: 🔧 Install Buildozer
         run: |
           python -m pip install --upgrade pip
           pip install buildozer
           pip install Cython==0.29.33
 
-      - name: 📝 Accept Android SDK licenses automatically
+      - name: 📝 Pre-configure Android SDK
         run: |
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
@@ -42,59 +59,26 @@ jobs:
           # Создаем директорию для лицензий
           mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
           
-          # Принимаем все необходимые лицензии вручную
+          # Принимаем все необходимые лицензии
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "601085b94cd77f0b54ff86406957099ebe79c4d6" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           
-          echo "✅ Android SDK licenses accepted"
+          echo "✅ Android SDK pre-configured"
 
-      - name: 🛠️ Install Android SDK components manually
+      - name: 🏗️ Build APK with Java 17
         run: |
           set -e
-          echo "🛠️ Installing Android SDK components..."
+          echo "🚀 Starting APK build process with Java 17..."
           
-          ANDROID_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$ANDROID_SDK_DIR"
+          # Принудительно устанавливаем Java 17 для всей сборки
+          export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
           
-          # Download command line tools
-          cd "$ANDROID_SDK_DIR"
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d cmdline-tools
-          mkdir -p cmdline-tools/latest
-          mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/
-          rm cmdline-tools.zip
-          
-          export ANDROID_HOME="$ANDROID_SDK_DIR"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-          
-          # Устанавливаем правильную версию build-tools (33.0.2 вместо 36.1.0)
-          yes | sdkmanager --install "platform-tools" 2>&1 | grep -v "Warning" || true
-          yes | sdkmanager --install "platforms;android-33" 2>&1 | grep -v "Warning" || true
-          yes | sdkmanager --install "build-tools;33.0.2" 2>&1 | grep -v "Warning" || true
-          
-          # Создаем symlink для обратной совместимости
-          mkdir -p "$ANDROID_HOME/tools/bin"
-          ln -sf "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager" 2>/dev/null || true
-          
-          echo "✅ Android SDK components installed"
-
-      - name: 🏗️ Build APK
-        run: |
-          set -e
-          echo "🚀 Starting APK build process..."
-          
-          # Устанавливаем переменные окружения
-          export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
-          
-          echo "=== Environment Check ==="
-          echo "ANDROID_HOME: $ANDROID_HOME"
-          echo "Build-tools exists: $(ls -la $ANDROID_HOME/build-tools/33.0.2/aidl 2>/dev/null && echo 'YES' || echo 'NO')"
+          echo "=== Final Java Check ==="
+          java -version
+          which java
+          which javac
           
           # Собираем APK
           buildozer -v android debug 2>&1 | tee build_output.log
@@ -119,6 +103,8 @@ jobs:
           if [ "$APK_COUNT" -eq "0" ]; then
             echo "❌ No APK files found"
             echo "Build failed" > artifacts/debug-info.txt
+            # Сохраняем последние строки лога для отладки
+            tail -50 build_output.log > artifacts/last_log.txt 2>/dev/null || true
           else
             echo "✅ Found $APK_COUNT APK file(s)"
             ls -la artifacts/
