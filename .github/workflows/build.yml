@@ -51,12 +51,12 @@ jobs:
             zip \
             unzip
         pip3 install --upgrade pip
-        pip3 install buildozer cython==0.29.33 pillow
+        pip3 install buildozer cython==0.29.33
 
     - name: 🔧 Configure Buildozer
       run: |
-        echo "=== Creating minimal buildozer.spec ==="
-        cat > buildozer.spec << EOF
+        echo "=== Creating buildozer.spec ==="
+        cat > buildozer.spec << 'EOF'
 [app]
 title = MemeCloud
 package.name = memecloud
@@ -64,16 +64,16 @@ package.domain = org.mortualer
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
 version = 1.2.0
-requirements = python3,kivy,requests,android,pillow
+requirements = python3,kivy,requests,android
 orientation = portrait
 fullscreen = 0
 
 [buildozer]
 log_level = 2
 
-# Иконки
-icon.filename = icon.png
-presplash.filename = icon.png
+# Иконки с правильными путями
+icon.filename = %(source.dir)s/icon.png
+presplash.filename = %(source.dir)s/icon.png
 
 # Android настройки
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
@@ -102,8 +102,19 @@ EOF
         # Создаем иконку если её нет
         if [ ! -f "icon.png" ]; then
           echo "Creating placeholder icon.png"
-          convert -size 512x512 xc:white icon.png || echo "ImageMagick not available, creating empty icon file"
-          touch icon.png
+          # Создаем простую иконку используя Python
+          python3 -c "
+from PIL import Image, ImageDraw
+img = Image.new('RGB', (512, 512), color='blue')
+draw = ImageDraw.Draw(img)
+draw.rectangle([50, 50, 462, 462], fill='white', outline='black', width=10)
+draw.text((256, 256), 'MC', fill='black', anchor='mm', font_size=200)
+img.save('icon.png')
+" || echo "PIL not available, creating empty icon file"
+          # Если PIL не установлен, создаем пустой файл
+          if [ ! -f "icon.png" ]; then
+            touch icon.png
+          fi
         fi
         
         # Создаем папку saved_sounds
@@ -113,7 +124,6 @@ EOF
         # Создаем requirements.txt
         echo "kivy==2.1.0" > requirements.txt
         echo "requests==2.28.2" >> requirements.txt
-        echo "pillow==9.5.0" >> requirements.txt
 
     - name: 🔨 Build APK with Buildozer
       run: |
