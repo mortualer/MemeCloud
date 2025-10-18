@@ -6,21 +6,18 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
 version = 1.2.0
 requirements = python3,kivy,requests,android,openssl
-
 orientation = portrait
 fullscreen = 0
 
 [buildozer]
 log_level = 2
 
-# Адаптивные иконки для Android
+# Иконки
 icon.filename = icon.png
-android.adaptive_icon_foreground = icon-foreground.png
-android.adaptive_icon_background = icon-background.png
 presplash.filename = icon.png
 
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.sdk = 24
@@ -39,3 +36,6 @@ android.allow_backup = True
 
 # Отключаем AAB, собираем только APK
 android.aab = False
+
+# Включаем отладочную информацию
+log_level = 2
