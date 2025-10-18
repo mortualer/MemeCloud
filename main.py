@@ -12,7 +12,6 @@ from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
-from kivy.uix.slider import Slider
 import os
 import requests
 import webbrowser
@@ -23,7 +22,7 @@ from kivy.utils import platform
 # SoundButton Class
 # -------------------------
 class SoundButton(BoxLayout):
-    current_button = None  # Currently playing button
+    current_button = None
 
     def __init__(self, text, sound, icon_path=None, app=None, sound_id=None, **kwargs):
         super().__init__(**kwargs)
@@ -38,12 +37,10 @@ class SoundButton(BoxLayout):
         self.btn_text = text
         self.is_expanded = False
         self.pinned = False
-        self.volume = 1.0  # Default volume
-        self.original_icon_path = icon_path
+        self.volume = 1.0
         self.highlight_anim = None
         self.sound_check_event = None
 
-        # Background and shadow
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
             self.shadow = RoundedRectangle(pos=(self.x - 2, self.y - 2),
@@ -52,7 +49,6 @@ class SoundButton(BoxLayout):
             self.bg_color = Color(0.25, 0.25, 0.35, 1)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
 
-        # Store original widgets for restoration
         self.original_widgets = []
         
         if icon_path and os.path.exists(icon_path):
@@ -60,7 +56,6 @@ class SoundButton(BoxLayout):
             self.original_widgets.append(self.icon_widget)
             self.add_widget(self.icon_widget)
 
-        # Button
         self.button = Button(
             text=text,
             size_hint=(1, 1),
@@ -232,10 +227,6 @@ class SoundButton(BoxLayout):
             self.sound_check_event.cancel()
             self.sound_check_event = None
 
-
-# -------------------------
-# DraggableBox Class
-# -------------------------
 class DraggableBox(BoxLayout):
     def on_touch_down(self, touch):
         for child in reversed(self.children):
@@ -262,10 +253,6 @@ class DraggableBox(BoxLayout):
         self.dragged = None
         return super().on_touch_up(touch)
 
-
-# -------------------------
-# Main Application
-# -------------------------
 class MyApp(App):
     CURRENT_VERSION = "1.2.0"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
@@ -273,17 +260,14 @@ class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Set app icon
-        self.icon = 'icon.png'
+        # Иконка устанавливается в buildozer.spec, не здесь
         
-        # Correct paths for Android
         if platform == 'android':
             from android.storage import app_storage_path
             self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
         else:
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
         
-        self.save_file = os.path.join(self.save_dir, "saved_paths.txt")
         self.settings_file = os.path.join(self.save_dir, "app_settings.json")
         
         print(f"Save directory: {self.save_dir}")
@@ -295,14 +279,15 @@ class MyApp(App):
         self.load_settings()
 
     def build(self):
-        # Request Android permissions
+        # В Kivy иконка устанавливается через buildozer.spec, не здесь
+        # self.icon = 'icon.png' - это не работает для Android APK
+        
         if platform == 'android':
             self.request_android_permissions()
         
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
         root = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        # Top bar with settings
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
         self.search_input = TextInput(size_hint=(1, 1), hint_text="Search...", multiline=False,
@@ -334,7 +319,6 @@ class MyApp(App):
         self.scroll.add_widget(self.layout)
         root.add_widget(self.scroll)
 
-        # Load sounds immediately
         self.load_existing_sounds()
         
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
@@ -663,7 +647,6 @@ class MyApp(App):
         update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
-
 
 if __name__ == "__main__":
     MyApp().run()
