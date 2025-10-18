@@ -36,6 +36,3 @@ android.allow_backup = True
 
 # Отключаем AAB, собираем только APK
 android.aab = False
-
-# Включаем отладочную информацию
-log_level = 2
