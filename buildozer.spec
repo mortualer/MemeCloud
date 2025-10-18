@@ -12,7 +12,7 @@ fullscreen = 0
 [buildozer]
 log_level = 2
 
-# Иконки
+# Простая иконка
 icon.filename = icon.png
 presplash.filename = icon.png
 
@@ -25,8 +25,8 @@ android.ndk = 25b
 android.private_storage = True
 android.arch = arm64-v8a
 
-# Включаем адаптивные иконки
-android.adaptive_icon = True
+# Отключаем адаптивные иконки для простоты
+android.adaptive_icon = False
 
 # Дополнительные настройки
 android.accept_sdk_license = True
