@@ -13,7 +13,9 @@ fullscreen = 0
 log_level = 2
 
 # Адаптивные иконки
-icon.filename = icon.png
+# В buildozer.spec
+icon.filename = %(source.dir)s/icon.png
+# presplash.filename = %(source.dir)s/presplash.png  # Закомментируйте пока
 #android.adaptive_icon_foreground = icon-foreground.png
 #android.adaptive_icon_background = icon-background.png
 presplash.filename = icon.png
