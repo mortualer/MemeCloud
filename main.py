@@ -347,7 +347,7 @@ class MyApp(App):
         self.load_settings()
 
     def build(self):
-        # Android permissions request - FIXED VERSION
+        # Android permissions request
         if platform == 'android':
             self.request_android_permissions()
         
@@ -402,7 +402,7 @@ class MyApp(App):
             Clock.schedule_once(self.check_android_permissions, 1)
 
     def request_android_permissions(self):
-        """Request Android permissions - SIMPLIFIED VERSION"""
+        """Request Android permissions"""
         if platform == 'android':
             try:
                 print("Requesting Android permissions...")
@@ -431,8 +431,6 @@ class MyApp(App):
                 for perm in permissions:
                     if not check_permission(perm):
                         print(f"Permission {perm} not granted")
-                        # Request permissions again
-                        self.request_android_permissions()
                         return
                 print("All permissions granted")
                 
@@ -514,7 +512,7 @@ class MyApp(App):
             print(f"Created save directory: {self.save_dir}")
             return
         
-        # FIRST: Always scan the save directory for MP3 files
+        # Scan the save directory for MP3 files
         print("Scanning save directory for MP3 files...")
         mp3_files = []
         for filename in os.listdir(self.save_dir):
@@ -523,16 +521,6 @@ class MyApp(App):
                 sound_path = os.path.join(self.save_dir, filename)
                 print(f"Found MP3: {filename}")
                 self.add_sound_button(sound_path)
-        
-        # SECOND: Also check saved paths file for backup
-        if os.path.exists(self.save_file):
-            print(f"Reading save file: {self.save_file}")
-            with open(self.save_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    path = line.strip()
-                    if os.path.exists(path) and path not in [os.path.join(self.save_dir, f) for f in mp3_files]:
-                        print(f"Adding sound from save file: {path}")
-                        self.add_sound_button(path)
         
         print(f"Total sounds loaded: {len(self.buttons)}")
 
@@ -549,15 +537,10 @@ class MyApp(App):
         
         print(f"Loading sound: {filename}")
         
-        # Look for icon
-        icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
-        if not os.path.exists(icon_file):
-            icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
-        
         sound = SoundLoader.load(path)
         if sound:
             print(f"Sound loaded successfully: {filename}")
-            btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
+            btn_widget = SoundButton(btn_text, sound, None, app=self, sound_id=sound_id)
             
             # Load saved volume setting
             if sound_id in self.sound_settings:
@@ -565,19 +548,8 @@ class MyApp(App):
             
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
-            
-            # Save to paths file
-            self.save_sound_path(path)
         else:
             print(f"Failed to load sound: {filename}")
-
-    def save_sound_path(self, path):
-        """Save sound path to file"""
-        try:
-            with open(self.save_file, "a", encoding="utf-8") as f:
-                f.write(path + "\n")
-        except Exception as e:
-            print(f"Error saving sound path: {e}")
 
     def delete_sound(self, sound_button):
         """Delete a sound and its files"""
@@ -604,9 +576,6 @@ class MyApp(App):
                             except Exception as e:
                                 print(f"Error removing file {file_path}: {e}")
                     
-                    # Remove from saved paths
-                    self.update_saved_paths_file()
-                    
                     # Remove from settings
                     if sound_id in self.sound_settings:
                         del self.sound_settings[sound_id]
@@ -618,36 +587,9 @@ class MyApp(App):
             print(f"Error deleting sound: {e}")
             self.show_error_popup("Error deleting sound")
 
-    def update_saved_paths_file(self):
-        """Update the saved paths file after deletion"""
-        try:
-            if os.path.exists(self.save_file):
-                os.remove(self.save_file)
-            
-            with open(self.save_file, "w", encoding="utf-8") as f:
-                for btn in self.buttons:
-                    # Find the sound file path
-                    for filename in os.listdir(self.save_dir):
-                        if btn.sound_id in filename and filename.endswith('.mp3'):
-                            f.write(os.path.join(self.save_dir, filename) + "\n")
-                            break
-            print("Saved paths file updated")
-        except Exception as e:
-            print(f"Error updating saved paths: {e}")
-
     def open_filechooser(self, instance):
         """Open file chooser to select MP3 files"""
         print("Opening file chooser...")
-        
-        # Check permissions first
-        if platform == 'android':
-            try:
-                from android.permissions import check_permission, Permission
-                if not check_permission(Permission.READ_EXTERNAL_STORAGE):
-                    self.show_error_popup("Storage permission required to access files")
-                    return
-            except:
-                pass
         
         content = BoxLayout(orientation='vertical', spacing=10)
         
