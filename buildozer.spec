@@ -5,7 +5,7 @@ package.domain = org.mortualer
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
 version = 1.2.0
-requirements = python3,kivy,requests,android,openssl
+requirements = python3,kivy,requests,android
 orientation = portrait
 fullscreen = 0
 
@@ -14,8 +14,8 @@ log_level = 2
 
 # Адаптивные иконки
 icon.filename = icon.png
-android.adaptive_icon_foreground = icon-foreground.png
-android.adaptive_icon_background = icon-background.png
+#android.adaptive_icon_foreground = icon-foreground.png
+#android.adaptive_icon_background = icon-background.png
 presplash.filename = icon.png
 
 # Android настройки
@@ -25,10 +25,10 @@ android.minapi = 21
 android.sdk = 24
 android.ndk = 25b
 android.private_storage = True
-android.arch = arm64-v8a
+android.arch = arm64-v8a, armeabi-v7a
 
 # Включаем адаптивные иконки
-android.adaptive_icon = True
+#android.adaptive_icon = True
 
 # Дополнительные настройки
 android.accept_sdk_license = True
