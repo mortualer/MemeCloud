@@ -321,14 +321,15 @@ class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Check for icon files
-        self.check_icons()
+        # Set app icon
+        self.icon = 'icon.png' if os.path.exists('icon.png') else None
         
         # Correct paths for Android
         if platform == 'android':
             from android.storage import app_storage_path
             self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
         else:
+            # For desktop - use project directory
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
         
         self.save_file = os.path.join(self.save_dir, "saved_paths.txt")
@@ -337,36 +338,16 @@ class MyApp(App):
         print(f"Save directory: {self.save_dir}")
         print(f"Save file: {self.save_file}")
         
+        # Create directory if it doesn't exist
         os.makedirs(self.save_dir, exist_ok=True)
+        
         self.buttons = []
         self.pin_active = False
         self.sound_settings = {}
         self.load_settings()
 
-    def check_icons(self):
-        """Check for icon files"""
-        required_icons = ['icon.png', 'icon-foreground.png', 'icon-background.png']
-        missing_icons = []
-        
-        for icon in required_icons:
-            if not os.path.exists(icon):
-                missing_icons.append(icon)
-        
-        if missing_icons:
-            print(f"Missing icons: {missing_icons}")
-            print("Create them using create_icons.py")
-        else:
-            print("All icon files present")
-
     def build(self):
-        # Set app icon
-        if os.path.exists('icon.png'):
-            self.icon = 'icon.png'
-            print("App icon set successfully")
-        else:
-            print("Icon file not found")
-        
-        # Android permissions request
+        # Android permissions request - FIXED VERSION
         if platform == 'android':
             self.request_android_permissions()
         
@@ -406,7 +387,10 @@ class MyApp(App):
         self.scroll.add_widget(self.layout)
         root.add_widget(self.scroll)
 
+        # Load sounds immediately
         self.load_existing_sounds()
+        
+        # Check for updates after a delay
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         return root
 
@@ -415,54 +399,45 @@ class MyApp(App):
         print("App started")
         if platform == 'android':
             # Check permissions again after startup
-            Clock.schedule_once(self.check_android_permissions, 2)
+            Clock.schedule_once(self.check_android_permissions, 1)
 
     def request_android_permissions(self):
-        """Request Android permissions"""
-        try:
-            print("Requesting Android permissions...")
-            from android.permissions import request_permissions, Permission, check_permission
-            
-            # Modern permissions for Android 13+
-            permissions = [
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.READ_MEDIA_AUDIO
-            ]
-            
-            # Check and request permissions
-            granted = all(check_permission(p) for p in permissions)
-            if not granted:
-                print("Requesting permissions...")
-                request_permissions(permissions)
-                print("Permissions requested successfully")
-            else:
-                print("All permissions already granted")
+        """Request Android permissions - SIMPLIFIED VERSION"""
+        if platform == 'android':
+            try:
+                print("Requesting Android permissions...")
+                from android.permissions import request_permissions, Permission
                 
-        except Exception as e:
-            print(f"Permission request failed: {e}")
+                # Request all needed permissions
+                permissions = [
+                    Permission.READ_EXTERNAL_STORAGE,
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.MANAGE_EXTERNAL_STORAGE
+                ]
+                
+                request_permissions(permissions)
+                print("Permissions requested")
+                
+            except Exception as e:
+                print(f"Permission request failed: {e}")
 
     def check_android_permissions(self, dt):
-        """Check and request permissions if needed"""
-        try:
-            from android.permissions import check_permission, Permission, request_permissions
-            
-            permissions = [
-                Permission.READ_EXTERNAL_STORAGE, 
-                Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.READ_MEDIA_AUDIO
-            ]
-            
-            for perm in permissions:
-                if not check_permission(perm):
-                    print(f"Permission {perm} not granted, requesting...")
-                    request_permissions(permissions)
-                    break
-            else:
+        """Check Android permissions"""
+        if platform == 'android':
+            try:
+                from android.permissions import check_permission, Permission
+                
+                permissions = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
+                for perm in permissions:
+                    if not check_permission(perm):
+                        print(f"Permission {perm} not granted")
+                        # Request permissions again
+                        self.request_android_permissions()
+                        return
                 print("All permissions granted")
                 
-        except Exception as e:
-            print(f"Permission check error: {e}")
+            except Exception as e:
+                print(f"Permission check error: {e}")
 
     def load_settings(self):
         """Load app settings from JSON file"""
@@ -539,43 +514,43 @@ class MyApp(App):
             print(f"Created save directory: {self.save_dir}")
             return
         
-        # Check saved paths file
+        # FIRST: Always scan the save directory for MP3 files
+        print("Scanning save directory for MP3 files...")
+        mp3_files = []
+        for filename in os.listdir(self.save_dir):
+            if filename.lower().endswith('.mp3'):
+                mp3_files.append(filename)
+                sound_path = os.path.join(self.save_dir, filename)
+                print(f"Found MP3: {filename}")
+                self.add_sound_button(sound_path)
+        
+        # SECOND: Also check saved paths file for backup
         if os.path.exists(self.save_file):
             print(f"Reading save file: {self.save_file}")
             with open(self.save_file, "r", encoding="utf-8") as f:
                 for line in f:
                     path = line.strip()
-                    if os.path.exists(path):
-                        print(f"Adding sound: {path}")
+                    if os.path.exists(path) and path not in [os.path.join(self.save_dir, f) for f in mp3_files]:
+                        print(f"Adding sound from save file: {path}")
                         self.add_sound_button(path)
-                    else:
-                        print(f"Sound file not found: {path}")
         
-        # If no saved sounds, check directory
-        if not self.buttons:
-            print("No saved sounds found, checking save directory...")
-            if os.path.exists(self.save_dir):
-                files = os.listdir(self.save_dir)
-                print(f"Files in save_dir: {files}")
-                for filename in sorted(files):
-                    if filename.lower().endswith(".mp3"):
-                        sound_path = os.path.join(self.save_dir, filename)
-                        print(f"Adding MP3: {sound_path}")
-                        self.add_sound_button(sound_path)
-            else:
-                print("Save directory doesn't exist")
+        print(f"Total sounds loaded: {len(self.buttons)}")
 
     def add_sound_button(self, path):
+        """Add a sound button from file path"""
+        # Check if this sound already exists in buttons
+        for btn in self.buttons:
+            if btn.sound_id in path:
+                return  # Skip if already exists
+        
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
         sound_id = os.path.splitext(filename)[0]
         
         print(f"Loading sound: {filename}")
         
-        # Look for icon with cleaned name
+        # Look for icon
         icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
-        
-        # If icon doesn't exist, try with original filename
         if not os.path.exists(icon_file):
             icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
         
@@ -590,8 +565,19 @@ class MyApp(App):
             
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
+            
+            # Save to paths file
+            self.save_sound_path(path)
         else:
             print(f"Failed to load sound: {filename}")
+
+    def save_sound_path(self, path):
+        """Save sound path to file"""
+        try:
+            with open(self.save_file, "a", encoding="utf-8") as f:
+                f.write(path + "\n")
+        except Exception as e:
+            print(f"Error saving sound path: {e}")
 
     def delete_sound(self, sound_button):
         """Delete a sound and its files"""
@@ -650,7 +636,19 @@ class MyApp(App):
             print(f"Error updating saved paths: {e}")
 
     def open_filechooser(self, instance):
+        """Open file chooser to select MP3 files"""
         print("Opening file chooser...")
+        
+        # Check permissions first
+        if platform == 'android':
+            try:
+                from android.permissions import check_permission, Permission
+                if not check_permission(Permission.READ_EXTERNAL_STORAGE):
+                    self.show_error_popup("Storage permission required to access files")
+                    return
+            except:
+                pass
+        
         content = BoxLayout(orientation='vertical', spacing=10)
         
         # Show root directory for Android
@@ -691,14 +689,12 @@ class MyApp(App):
                                 new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                                 counter += 1
                         
-                        # Copy file instead of moving (more safe)
+                        # Copy file to app directory
                         import shutil
                         shutil.copy2(path, new_path)
                         print(f"File copied to: {new_path}")
                         
                         self.add_sound_button(new_path)
-                        with open(self.save_file, "a", encoding="utf-8") as f:
-                            f.write(new_path + "\n")
                             
                     except Exception as e:
                         print(f"File copy error: {e}")
@@ -717,7 +713,7 @@ class MyApp(App):
         
         # App info
         info_label = Label(
-            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}\n• Icons: {'Loaded' if os.path.exists('icon.png') else 'Missing'}",
+            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}",
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
