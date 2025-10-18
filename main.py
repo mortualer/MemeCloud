@@ -16,6 +16,7 @@ import os
 import requests
 import webbrowser
 import json
+import shutil
 from kivy.utils import platform
 
 if platform == 'android':
@@ -42,6 +43,7 @@ class SoundButton(BoxLayout):
         self.is_expanded = False
         self.pinned = False
         self.volume = 1.0
+        self.original_icon_path = icon_path
         self.highlight_anim = None
         self.sound_check_event = None
 
@@ -94,6 +96,9 @@ class SoundButton(BoxLayout):
             self.sound.stop()
             self.sound.play()
             self.start_highlight()
+            # Отменяем предыдущую проверку и запускаем новую
+            if self.sound_check_event:
+                self.sound_check_event.cancel()
             self.sound_check_event = Clock.schedule_interval(self.check_sound, 0.1)
 
     def start_highlight(self):
@@ -112,15 +117,18 @@ class SoundButton(BoxLayout):
 
     def check_sound(self, dt):
         if self.sound and self.sound.state != 'play':
+            # Звук закончил воспроизведение
             self.stop_highlight()
+            # Отменяем проверку
             if self.sound_check_event:
                 self.sound_check_event.cancel()
                 self.sound_check_event = None
             
+            # Сворачиваем если развернуто и не закреплено
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
-            return False
-        return True
+            return False  # Останавливаем проверку
+        return True  # Продолжаем проверку
 
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
@@ -140,6 +148,7 @@ class SoundButton(BoxLayout):
                     btn.collapse()
         self.is_expanded = True
         
+        # Воспроизводим звук при расширении
         self.play_sound()
         self.create_expanded_view()
         
@@ -150,6 +159,7 @@ class SoundButton(BoxLayout):
         self.clear_widgets()
         
         expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
+        expanded_layout.bind(on_touch_down=self.on_expanded_touch)
         
         title_label = Label(
             text=self.btn_text,
@@ -159,6 +169,7 @@ class SoundButton(BoxLayout):
             bold=True,
             color=(1, 1, 1, 1)
         )
+        title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
         
         btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
@@ -185,6 +196,25 @@ class SoundButton(BoxLayout):
         
         expanded_layout.add_widget(btn_layout)
         self.add_widget(expanded_layout)
+
+    def on_expanded_touch(self, instance, touch):
+        if self.is_expanded and touch.is_double_tap:
+            self.play_sound()
+            return True
+        return False
+
+    def on_title_touch(self, instance, touch):
+        if self.is_expanded and instance.collide_point(*touch.pos):
+            self.play_sound()
+            return True
+        return False
+
+    def on_volume_change(self, instance, value):
+        self.volume = value
+        if self.sound:
+            self.sound.volume = value
+        if self.app:
+            self.app.save_sound_settings()
 
     def delete_sound(self, instance):
         def confirm_delete(instance):
@@ -264,31 +294,26 @@ class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Иконка устанавливается в buildozer.spec, не здесь
-        
         if platform == 'android':
-    try:
-        from android.storage import primary_external_storage_path, app_storage_path
-        self.save_dir = os.path.join(primary_external_storage_path(), "MemeCloud", "saved_sounds")
-    except Exception:
-        from android.storage import app_storage_path
-        self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
-else:
-    self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
+            try:
+                from android.storage import primary_external_storage_path, app_storage_path
+                self.save_dir = os.path.join(primary_external_storage_path(), "MemeCloud", "saved_sounds")
+            except Exception:
+                from android.storage import app_storage_path
+                self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
+        else:
+            self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
 
-self.settings_file = os.path.join(self.save_dir, "app_settings.json")
-print(f"Save directory: {self.save_dir}")
+        self.settings_file = os.path.join(self.save_dir, "app_settings.json")
+        print(f"Save directory: {self.save_dir}")
 
-os.makedirs(self.save_dir, exist_ok=True)
-self.buttons = []
-self.pin_active = False
-self.sound_settings = {}
-self.load_settings()
+        os.makedirs(self.save_dir, exist_ok=True)
+        self.buttons = []
+        self.pin_active = False
+        self.sound_settings = {}
+        self.load_settings()
 
     def build(self):
-        # В Kivy иконка устанавливается через buildozer.spec, не здесь
-        # self.icon = 'icon.png' - это не работает для Android APK
-        
         if platform == 'android':
             self.request_android_permissions()
         
@@ -335,6 +360,24 @@ self.load_settings()
         print("App started")
         if platform == 'android':
             Clock.schedule_once(self.check_android_permissions, 1)
+        
+        # Копируем встроенные mp3 при первом запуске
+        try:
+            app_root = os.path.dirname(os.path.abspath(__file__))
+            src_dir = os.path.join(app_root, "saved_sounds")
+            dst_dir = self.save_dir
+            if os.path.exists(src_dir):
+                for file in os.listdir(src_dir):
+                    if file.lower().endswith(".mp3"):
+                        src = os.path.join(src_dir, file)
+                        dst = os.path.join(dst_dir, file)
+                        if not os.path.exists(dst):
+                            shutil.copy2(src, dst)
+                            print(f"Copied {file}")
+                # Перезагружаем звуки после копирования
+                Clock.schedule_once(lambda dt: self.load_existing_sounds(), 1)
+        except Exception as e:
+            print("Error copying default sounds:", e)
 
     def request_android_permissions(self):
         if platform == 'android':
@@ -431,8 +474,12 @@ self.load_settings()
             os.makedirs(self.save_dir, exist_ok=True)
             return
         
+        # Очищаем существующие кнопки
+        self.layout.clear_widgets()
+        self.buttons.clear()
+        
         print("Scanning for MP3 files...")
-        for filename in os.listdir(self.save_dir):
+        for filename in sorted(os.listdir(self.save_dir)):
             if filename.lower().endswith('.mp3'):
                 sound_path = os.path.join(self.save_dir, filename)
                 print(f"Found MP3: {filename}")
@@ -441,16 +488,26 @@ self.load_settings()
         print(f"Total sounds loaded: {len(self.buttons)}")
 
     def add_sound_button(self, path):
+        # Проверяем если этот звук уже существует в кнопках
+        for btn in self.buttons:
+            if btn.sound_id in path:
+                return  # Пропускаем если уже существует
+        
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
         sound_id = os.path.splitext(filename)[0]
         
         print(f"Loading sound: {filename}")
         
+        # Ищем иконку
+        icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
+        if not os.path.exists(icon_file):
+            icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
+        
         sound = SoundLoader.load(path)
         if sound:
             print(f"Sound loaded: {filename}")
-            btn_widget = SoundButton(btn_text, sound, None, app=self, sound_id=sound_id)
+            btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
             
             if sound_id in self.sound_settings:
                 btn_widget.volume = self.sound_settings[sound_id].get('volume', 1.0)
@@ -552,7 +609,7 @@ self.load_settings()
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
         info_label = Label(
-            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nSounds loaded: {len(self.buttons)}\nSave dir: {self.save_dir}",
+            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}\n• Icons: {'Loaded' if os.path.exists('icon.png') else 'Missing'}",
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
@@ -617,10 +674,12 @@ self.load_settings()
             if response.status_code == 200:
                 data = response.json()
                 latest_version = data.get('version', '')
+                download_url = data.get('download_url', '')
+                changelog = data.get('changelog', '')
                 
                 if latest_version and latest_version != self.CURRENT_VERSION:
                     print(f"Update available: {latest_version}")
-                    self.show_update_popup(latest_version)
+                    self.show_update_popup(latest_version, download_url, changelog)
                 else:
                     print("No updates available")
             else:
@@ -628,13 +687,25 @@ self.load_settings()
         except Exception as e:
             print(f"Update check error: {e}")
 
-    def show_update_popup(self, latest_version):
+    def show_update_popup(self, latest_version, download_url, changelog):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        content.add_widget(Label(text=f"New version available: {latest_version}"))
+        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
+        text_label = Label(
+            text=update_text,
+            size_hint_y=0.7,
+            text_size=(Window.width * 0.7 - 20, None),
+            halign='left',
+            valign='top'
+        )
+        text_label.bind(size=text_label.setter('text_size'))
+        
+        scroll_text = ScrollView(size_hint_y=0.7)
+        scroll_text.add_widget(text_label)
+        content.add_widget(scroll_text)
         
         btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        update_btn = Button(text="Download", background_color=(0.2, 0.7, 0.3, 1))
+        update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
         cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
         btn_box.add_widget(update_btn)
         btn_box.add_widget(cancel_btn)
@@ -643,7 +714,7 @@ self.load_settings()
         popup = Popup(
             title="Update Available!",
             content=content,
-            size_hint=(0.6, 0.4),
+            size_hint=(0.8, 0.7),
             auto_dismiss=False
         )
         
@@ -654,30 +725,6 @@ self.load_settings()
         update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
-
-       def on_start(self):
-    # ✅ Запрашиваем разрешения
-    if platform == 'android':
-        perms = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
-        missing = [p for p in perms if not check_permission(p)]
-        if missing:
-            request_permissions(missing)
-
-    # ✅ Копируем встроенные mp3 при первом запуске
-    try:
-        app_root = os.path.dirname(os.path.abspath(__file__))
-        src_dir = os.path.join(app_root, "saved_sounds")
-        dst_dir = self.save_dir
-        if os.path.exists(src_dir):
-            for file in os.listdir(src_dir):
-                if file.lower().endswith(".mp3"):
-                    src = os.path.join(src_dir, file)
-                    dst = os.path.join(dst_dir, file)
-                    if not os.path.exists(dst):
-                        shutil.copy2(src, dst)
-                        print(f"Copied {file}")
-    except Exception as e:
-        print("Error copying default sounds:", e)
 
 if __name__ == "__main__":
     MyApp().run()
