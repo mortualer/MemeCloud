@@ -39,9 +39,9 @@ class SoundButton(BoxLayout):
         self.is_expanded = False
         self.pinned = False
         self.volume = 1.0  # Default volume
-        self.original_icon_path = icon_path  # Save icon path for restoration
-        self.highlight_anim = None  # Initialize highlight_anim
-        self.sound_check_event = None  # Initialize sound check event
+        self.original_icon_path = icon_path
+        self.highlight_anim = None
+        self.sound_check_event = None
 
         # Background and shadow
         with self.canvas.before:
@@ -95,14 +95,10 @@ class SoundButton(BoxLayout):
             self.sound.stop()
             self.sound.play()
             self.start_highlight()
-            # Start checking sound state
             self.sound_check_event = Clock.schedule_interval(self.check_sound, 0.1)
 
     def start_highlight(self):
-        # Cancel previous animation if exists
         self.stop_highlight()
-        
-        # Create new animation
         anim = Animation(rgba=(0.5, 0.5, 0.7, 1), duration=0.2) + \
                Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2)
         anim.repeat = True
@@ -113,19 +109,15 @@ class SoundButton(BoxLayout):
         if self.highlight_anim:
             self.highlight_anim.cancel(self.bg_color)
             self.highlight_anim = None
-        # Reset to original color
         self.bg_color.rgba = (0.25, 0.25, 0.35, 1)
 
     def check_sound(self, dt):
         if self.sound and self.sound.state != 'play':
-            # Sound finished playing
             self.stop_highlight()
-            # Cancel the sound check event
             if self.sound_check_event:
                 self.sound_check_event.cancel()
                 self.sound_check_event = None
             
-            # Collapse if expanded and not pinned
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
             return False
@@ -149,24 +141,17 @@ class SoundButton(BoxLayout):
                     btn.collapse()
         self.is_expanded = True
         
-        # Automatically play sound when expanded
         self.play_sound()
-        
-        # Create expanded view
         self.create_expanded_view()
         
         anim = Animation(pos=(0, 0), size=(Window.width, Window.height), duration=0.3, t='out_quad')
         anim.start(self)
 
     def create_expanded_view(self):
-        # Clear current widgets
         self.clear_widgets()
         
-        # Main expanded layout - make it clickable for sound playback
         expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
-        expanded_layout.bind(on_touch_down=self.on_expanded_touch)  # Handle clicks for playback
         
-        # Title - also clickable for sound playback
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
@@ -175,13 +160,10 @@ class SoundButton(BoxLayout):
             bold=True,
             color=(1, 1, 1, 1)
         )
-        title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
         
-        # Button layout - only Delete and Close
         btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
         
-        # Delete button
         delete_btn = Button(
             text='DELETE',
             size_hint_x=0.6,
@@ -192,7 +174,6 @@ class SoundButton(BoxLayout):
         delete_btn.bind(on_press=self.delete_sound)
         btn_layout.add_widget(delete_btn)
         
-        # Close button
         close_btn = Button(
             text='CLOSE',
             size_hint_x=0.4,
@@ -204,30 +185,7 @@ class SoundButton(BoxLayout):
         btn_layout.add_widget(close_btn)
         
         expanded_layout.add_widget(btn_layout)
-        
         self.add_widget(expanded_layout)
-
-    def on_expanded_touch(self, instance, touch):
-        # When clicking on expanded button - play sound
-        if self.is_expanded and touch.is_double_tap:
-            self.play_sound()
-            return True
-        return False
-
-    def on_title_touch(self, instance, touch):
-        # When clicking on title - play sound
-        if self.is_expanded and instance.collide_point(*touch.pos):
-            self.play_sound()
-            return True
-        return False
-
-    def on_volume_change(self, instance, value):
-        self.volume = value
-        if self.sound:
-            self.sound.volume = value
-        # Save volume setting
-        if self.app:
-            self.app.save_sound_settings()
 
     def delete_sound(self, instance):
         def confirm_delete(instance):
@@ -255,10 +213,7 @@ class SoundButton(BoxLayout):
             return
         self.is_expanded = False
         
-        # Stop sound and highlight when collapsing
         self.stop_sound_and_collapse()
-        
-        # Restore original view
         self.restore_original_view()
         
         anim = Animation(size=(self.width, 150), pos=self.pos, duration=0.3, t='out_quad')
@@ -266,8 +221,6 @@ class SoundButton(BoxLayout):
 
     def restore_original_view(self):
         self.clear_widgets()
-        
-        # Restore original widgets
         for widget in self.original_widgets:
             self.add_widget(widget)
 
@@ -275,7 +228,6 @@ class SoundButton(BoxLayout):
         if self.sound:
             self.sound.stop()
         self.stop_highlight()
-        # Cancel sound check event
         if self.sound_check_event:
             self.sound_check_event.cancel()
             self.sound_check_event = None
@@ -322,32 +274,28 @@ class MyApp(App):
         super().__init__(**kwargs)
         
         # Set app icon
-        self.icon = 'icon.png' if os.path.exists('icon.png') else None
+        self.icon = 'icon.png'
         
         # Correct paths for Android
         if platform == 'android':
             from android.storage import app_storage_path
             self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
         else:
-            # For desktop - use project directory
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
         
         self.save_file = os.path.join(self.save_dir, "saved_paths.txt")
         self.settings_file = os.path.join(self.save_dir, "app_settings.json")
         
         print(f"Save directory: {self.save_dir}")
-        print(f"Save file: {self.save_file}")
         
-        # Create directory if it doesn't exist
         os.makedirs(self.save_dir, exist_ok=True)
-        
         self.buttons = []
         self.pin_active = False
         self.sound_settings = {}
         self.load_settings()
 
     def build(self):
-        # Android permissions request
+        # Request Android permissions
         if platform == 'android':
             self.request_android_permissions()
         
@@ -372,7 +320,6 @@ class MyApp(App):
         self.upload_button.bind(on_release=self.open_filechooser)
         top_bar.add_widget(self.upload_button)
 
-        # Settings button
         self.settings_button = Button(text="i", size_hint=(None, 1), width=100,
                                      background_color=(0.4, 0.4, 0.6, 1), color=(1, 1, 1, 1),
                                      font_size='14sp')
@@ -390,25 +337,20 @@ class MyApp(App):
         # Load sounds immediately
         self.load_existing_sounds()
         
-        # Check for updates after a delay
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         return root
 
     def on_start(self):
-        """Called when app starts"""
         print("App started")
         if platform == 'android':
-            # Check permissions again after startup
             Clock.schedule_once(self.check_android_permissions, 1)
 
     def request_android_permissions(self):
-        """Request Android permissions"""
         if platform == 'android':
             try:
                 print("Requesting Android permissions...")
                 from android.permissions import request_permissions, Permission
                 
-                # Request all needed permissions
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
@@ -422,7 +364,6 @@ class MyApp(App):
                 print(f"Permission request failed: {e}")
 
     def check_android_permissions(self, dt):
-        """Check Android permissions"""
         if platform == 'android':
             try:
                 from android.permissions import check_permission, Permission
@@ -438,7 +379,6 @@ class MyApp(App):
                 print(f"Permission check error: {e}")
 
     def load_settings(self):
-        """Load app settings from JSON file"""
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
@@ -447,15 +387,13 @@ class MyApp(App):
                 print("Settings loaded successfully")
             else:
                 self.sound_settings = {}
-                print("No settings file found, using defaults")
+                print("No settings file found")
         except Exception as e:
             print(f"Error loading settings: {e}")
             self.sound_settings = {}
 
     def save_sound_settings(self):
-        """Save sound settings to JSON file"""
         try:
-            # Update settings with current volumes
             for btn in self.buttons:
                 if btn.sound_id:
                     self.sound_settings[btn.sound_id] = {
@@ -476,11 +414,8 @@ class MyApp(App):
             print(f"Error saving settings: {e}")
 
     def clean_sound_name(self, filename):
-        """Clean sound name by removing common unwanted text"""
-        # Remove file extension
         name = os.path.splitext(filename)[0]
         
-        # Remove common unwanted phrases
         unwanted_phrases = [
             "Sound Button", "sound button", "SoundButton", "soundbutton",
             "Sound", "sound", "Button", "button", "MP3", "mp3"
@@ -489,35 +424,25 @@ class MyApp(App):
         for phrase in unwanted_phrases:
             name = name.replace(phrase, "")
         
-        # Clean up extra spaces and underscores
         name = name.replace("_", " ").replace("-", " ").strip()
-        
-        # Remove extra spaces
         name = " ".join(name.split())
         
-        # If name is empty after cleaning, use original filename
         if not name:
             name = os.path.splitext(filename)[0]
             
         return name
 
     def load_existing_sounds(self):
-        """Load saved sounds with their settings"""
-        print(f"Loading existing sounds from: {self.save_dir}")
+        print(f"Loading sounds from: {self.save_dir}")
         
-        # Check if directory exists
         if not os.path.exists(self.save_dir):
-            print(f"Save directory does not exist: {self.save_dir}")
+            print(f"Creating directory: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
-            print(f"Created save directory: {self.save_dir}")
             return
         
-        # Scan the save directory for MP3 files
-        print("Scanning save directory for MP3 files...")
-        mp3_files = []
+        print("Scanning for MP3 files...")
         for filename in os.listdir(self.save_dir):
             if filename.lower().endswith('.mp3'):
-                mp3_files.append(filename)
                 sound_path = os.path.join(self.save_dir, filename)
                 print(f"Found MP3: {filename}")
                 self.add_sound_button(sound_path)
@@ -525,12 +450,6 @@ class MyApp(App):
         print(f"Total sounds loaded: {len(self.buttons)}")
 
     def add_sound_button(self, path):
-        """Add a sound button from file path"""
-        # Check if this sound already exists in buttons
-        for btn in self.buttons:
-            if btn.sound_id in path:
-                return  # Skip if already exists
-        
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
         sound_id = os.path.splitext(filename)[0]
@@ -539,44 +458,37 @@ class MyApp(App):
         
         sound = SoundLoader.load(path)
         if sound:
-            print(f"Sound loaded successfully: {filename}")
+            print(f"Sound loaded: {filename}")
             btn_widget = SoundButton(btn_text, sound, None, app=self, sound_id=sound_id)
             
-            # Load saved volume setting
             if sound_id in self.sound_settings:
                 btn_widget.volume = self.sound_settings[sound_id].get('volume', 1.0)
             
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
         else:
-            print(f"Failed to load sound: {filename}")
+            print(f"Failed to load: {filename}")
 
     def delete_sound(self, sound_button):
-        """Delete a sound and its files"""
         try:
-            # Find and remove the sound file
             for btn in self.buttons[:]:
                 if btn == sound_button:
-                    # Stop sound if playing
                     if btn.sound:
                         btn.sound.stop()
                     
-                    # Remove from layout and list
                     self.layout.remove_widget(btn)
                     self.buttons.remove(btn)
                     
-                    # Remove sound file
                     sound_id = btn.sound_id
                     for filename in os.listdir(self.save_dir):
                         if filename.startswith(sound_id) or sound_id in filename:
                             file_path = os.path.join(self.save_dir, filename)
                             try:
                                 os.remove(file_path)
-                                print(f"Removed file: {file_path}")
+                                print(f"Removed: {file_path}")
                             except Exception as e:
-                                print(f"Error removing file {file_path}: {e}")
+                                print(f"Error removing file: {e}")
                     
-                    # Remove from settings
                     if sound_id in self.sound_settings:
                         del self.sound_settings[sound_id]
                         self.save_sound_settings()
@@ -588,12 +500,10 @@ class MyApp(App):
             self.show_error_popup("Error deleting sound")
 
     def open_filechooser(self, instance):
-        """Open file chooser to select MP3 files"""
         print("Opening file chooser...")
         
         content = BoxLayout(orientation='vertical', spacing=10)
         
-        # Show root directory for Android
         if platform == 'android':
             initial_path = "/storage/emulated/0/"
         else:
@@ -619,11 +529,10 @@ class MyApp(App):
             if filechooser.selection:
                 for path in filechooser.selection:
                     try:
-                        print(f"Selected file: {path}")
+                        print(f"Selected: {path}")
                         filename = os.path.basename(path)
                         new_path = os.path.join(self.save_dir, filename)
                         
-                        # If file already exists, add number
                         if os.path.exists(new_path):
                             base, ext = os.path.splitext(filename)
                             counter = 1
@@ -631,16 +540,15 @@ class MyApp(App):
                                 new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                                 counter += 1
                         
-                        # Copy file to app directory
                         import shutil
                         shutil.copy2(path, new_path)
-                        print(f"File copied to: {new_path}")
+                        print(f"Copied to: {new_path}")
                         
                         self.add_sound_button(new_path)
                             
                     except Exception as e:
-                        print(f"File copy error: {e}")
-                        self.show_error_popup(f"File upload error: {e}")
+                        print(f"Copy error: {e}")
+                        self.show_error_popup(f"Upload error: {e}")
                 popup.dismiss()
             else:
                 print("No file selected")
@@ -650,12 +558,10 @@ class MyApp(App):
         popup.open()
 
     def open_settings(self, instance):
-        """Open settings popup"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
-        # App info
         info_label = Label(
-            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}",
+            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nSounds loaded: {len(self.buttons)}\nSave dir: {self.save_dir}",
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
@@ -665,7 +571,6 @@ class MyApp(App):
         info_label.bind(size=info_label.setter('text_size'))
         content.add_widget(info_label)
         
-        # Buttons
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
         
         github_btn = Button(text="GitHub", background_color=(0.3, 0.3, 0.5, 1))
@@ -684,9 +589,9 @@ class MyApp(App):
     def toggle_pin(self, instance):
         self.pin_active = not self.pin_active
         if self.pin_active:
-            instance.background_color = (0.15, 0.25, 0.45, 1)  # dark
+            instance.background_color = (0.15, 0.25, 0.45, 1)
         else:
-            instance.background_color = (0.3, 0.8, 0.3, 1)  # green
+            instance.background_color = (0.3, 0.8, 0.3, 1)
 
         for btn in self.buttons:
             if btn.is_expanded:
@@ -705,7 +610,6 @@ class MyApp(App):
             btn_widget.height = 150 if visible else 0
 
     def show_error_popup(self, message):
-        """Show error popup"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Label(text=message))
         close_btn = Button(text="OK", size_hint_y=None, height=50)
@@ -722,44 +626,24 @@ class MyApp(App):
             if response.status_code == 200:
                 data = response.json()
                 latest_version = data.get('version', '')
-                download_url = data.get('download_url', '')
-                changelog = data.get('changelog', '')
                 
                 if latest_version and latest_version != self.CURRENT_VERSION:
                     print(f"Update available: {latest_version}")
-                    self.show_update_popup(latest_version, download_url, changelog)
+                    self.show_update_popup(latest_version)
                 else:
                     print("No updates available")
             else:
-                print(f"Update check failed with status: {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print(f"Network error during update check: {e}")
-        except ValueError as e:
-            print(f"JSON parsing error: {e}")
+                print(f"Update check failed: {response.status_code}")
         except Exception as e:
-            print(f"Unexpected error during update check: {e}")
+            print(f"Update check error: {e}")
 
-    def show_update_popup(self, latest_version, download_url, changelog):
+    def show_update_popup(self, latest_version):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        # Update text
-        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
-        text_label = Label(
-            text=update_text,
-            size_hint_y=0.7,
-            text_size=(Window.width * 0.7 - 20, None),
-            halign='left',
-            valign='top'
-        )
-        text_label.bind(size=text_label.setter('text_size'))
+        content.add_widget(Label(text=f"New version available: {latest_version}"))
         
-        scroll_text = ScrollView(size_hint_y=0.7)
-        scroll_text.add_widget(text_label)
-        content.add_widget(scroll_text)
-        
-        # Buttons
         btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
+        update_btn = Button(text="Download", background_color=(0.2, 0.7, 0.3, 1))
         cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
         btn_box.add_widget(update_btn)
         btn_box.add_widget(cancel_btn)
@@ -768,12 +652,11 @@ class MyApp(App):
         popup = Popup(
             title="Update Available!",
             content=content,
-            size_hint=(0.8, 0.7),
+            size_hint=(0.6, 0.4),
             auto_dismiss=False
         )
         
         def download_update(instance):
-            # Open latest releases page
             webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
             popup.dismiss()
         
