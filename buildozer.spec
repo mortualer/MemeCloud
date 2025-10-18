@@ -14,6 +14,8 @@ log_level = 2
 
 # Простая иконка
 icon.filename = icon.png
+android.adaptive_icon.foreground = icon-foreground.png
+android.adaptive_icon.background = icon-background.png
 presplash.filename = icon.png
 
 # Android настройки
