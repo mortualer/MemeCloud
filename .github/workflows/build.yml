@@ -79,17 +79,17 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
-          - name: Resize icons to 512x512
-          run: |
-            pip install pillow
-            python - <<'EOF'
-            from PIL import Image
-            for name in ["icon.png", "icon-foreground.png", "icon-background.png"]:
-                img = Image.open(name).convert("RGBA")
-                img = img.resize((512, 512), Image.LANCZOS)
-                img.save(name)
-                print(f"{name} resized to 512x512")
-            EOF
+      - name: Resize icons to 512x512
+        run: |
+          pip install pillow
+          python - <<'EOF'
+          from PIL import Image
+          for name in ["icon.png", "icon-foreground.png", "icon-background.png"]:
+              img = Image.open(name).convert("RGBA")
+              img = img.resize((512, 512), Image.LANCZOS)
+              img.save(name)
+              print(f"{name} resized to 512x512")
+          EOF
 
       - name: 🏗️ Build REAL APK
         run: |
@@ -159,7 +159,6 @@ jobs:
               echo "📱 APK Info: $apk"
               file "$apk" || true
             done
-          fi
 
       - name: 📋 Save build logs
         if: always()
