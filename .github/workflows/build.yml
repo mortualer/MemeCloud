@@ -26,7 +26,7 @@ jobs:
             python3-pip autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev libtinfo5 \
             cmake libffi-dev libssl-dev \
-            curl wget
+            curl wget unzip
 
       - name: 🔧 Force Java 17 for entire system
         run: |
@@ -37,14 +37,12 @@ jobs:
 
       - name: 🔧 Install Buildozer
         run: |
-          python3 -m pip install --upgrade pip
-          pip install buildozer
-          pip install Cython==0.29.33
-          
+          python -m pip install --upgrade pip
+          pip install buildozer Cython==0.29.33 pillow
+
       - name: 🛠️ Complete Android SDK setup with Java 17
         run: |
           set -e
-          echo "🛠️ Setting up Android SDK..."
           ANDROID_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p "$ANDROID_SDK_DIR"
           cd "$ANDROID_SDK_DIR"
@@ -60,56 +58,45 @@ jobs:
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$ANDROID_HOME/licenses/android-sdk-license"
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_HOME/licenses/android-sdk-license"
-          yes | sdkmanager --install "platform-tools" 2>&1 | grep -v "Warning" || true
-          yes | sdkmanager --install "platforms;android-33" 2>&1 | grep -v "Warning" || true
-          yes | sdkmanager --install "build-tools;33.0.2" 2>&1 | grep -v "Warning" || true
-          mkdir -p "$ANDROID_HOME/tools/bin"
-          ln -sf "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager" 2>/dev/null || true
-          echo "✅ Android SDK setup completed"
+          yes | sdkmanager --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" || true
 
       - name: Resize icons to 512x512
         run: |
-          pip install pillow
-          python3 <<'EOF'
+          python - <<'EOF'
           from PIL import Image
           for name in ["icon.png", "icon-foreground.png", "icon-background.png"]:
               img = Image.open(name).convert("RGBA")
               img = img.resize((512, 512), Image.LANCZOS)
               img.save(name)
-              print(f"{name} resized to 512x512")
           EOF
 
-      - name: 🏗️ Build APK
+      - name: 🏗️ Build APK (log to file)
         run: |
           set -e
-          export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
-          echo "📱 Building DEBUG APK..."
-          buildozer -v android debug
-          if find ./bin -name "*-debug.apk" | grep -q .; then
-            echo "✅ DEBUG APK built successfully!"
-          else
-            echo "🔄 DEBUG failed, trying RELEASE APK..."
-            buildozer -v android release
-          fi
+          mkdir -p logs
+          echo "🚀 Starting Buildozer APK build..."
+          buildozer android debug > logs/build.log 2>&1 || buildozer android release >> logs/build.log 2>&1
 
       - name: 📤 Collect APK files
         run: |
           mkdir -p artifacts
-          rm -rf artifacts/*
           find ./bin -name "*.apk" -exec cp {} artifacts/ \; 2>/dev/null || true
-          APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
-          echo "📊 Found $APK_COUNT APK file(s)"
-          if [ "$APK_COUNT" -eq "0" ]; then
-            echo "❌ No APK files found!"
-            exit 1
-          fi
+          echo "📦 APK files copied to artifacts:"
+          ls -la artifacts/
 
-      - name: 📄 Upload APK Artifact
+      - name: 🚀 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MemeCloud-APK
           path: artifacts/
           retention-days: 30
           if-no-files-found: error
+
+      - name: 📄 Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Logs
+          path: logs/build.log
+          retention-days: 7
+          if-no-files-found: warn
