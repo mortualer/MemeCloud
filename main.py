@@ -18,6 +18,10 @@ import webbrowser
 import json
 from kivy.utils import platform
 
+if platform == 'android':
+    from android.permissions import request_permissions, check_permission, Permission
+    from android.storage import primary_external_storage_path, app_storage_path
+
 # -------------------------
 # SoundButton Class
 # -------------------------
@@ -263,20 +267,23 @@ class MyApp(App):
         # Иконка устанавливается в buildozer.spec, не здесь
         
         if platform == 'android':
-            from android.storage import app_storage_path
-            self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
-        else:
-            self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
-        
-        self.settings_file = os.path.join(self.save_dir, "app_settings.json")
-        
-        print(f"Save directory: {self.save_dir}")
-        
-        os.makedirs(self.save_dir, exist_ok=True)
-        self.buttons = []
-        self.pin_active = False
-        self.sound_settings = {}
-        self.load_settings()
+    try:
+        from android.storage import primary_external_storage_path, app_storage_path
+        self.save_dir = os.path.join(primary_external_storage_path(), "MemeCloud", "saved_sounds")
+    except Exception:
+        from android.storage import app_storage_path
+        self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
+else:
+    self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
+
+self.settings_file = os.path.join(self.save_dir, "app_settings.json")
+print(f"Save directory: {self.save_dir}")
+
+os.makedirs(self.save_dir, exist_ok=True)
+self.buttons = []
+self.pin_active = False
+self.sound_settings = {}
+self.load_settings()
 
     def build(self):
         # В Kivy иконка устанавливается через buildozer.spec, не здесь
@@ -647,6 +654,30 @@ class MyApp(App):
         update_btn.bind(on_release=download_update)
         cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
+
+       def on_start(self):
+    # ✅ Запрашиваем разрешения
+    if platform == 'android':
+        perms = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
+        missing = [p for p in perms if not check_permission(p)]
+        if missing:
+            request_permissions(missing)
+
+    # ✅ Копируем встроенные mp3 при первом запуске
+    try:
+        app_root = os.path.dirname(os.path.abspath(__file__))
+        src_dir = os.path.join(app_root, "saved_sounds")
+        dst_dir = self.save_dir
+        if os.path.exists(src_dir):
+            for file in os.listdir(src_dir):
+                if file.lower().endswith(".mp3"):
+                    src = os.path.join(src_dir, file)
+                    dst = os.path.join(dst_dir, file)
+                    if not os.path.exists(dst):
+                        shutil.copy2(src, dst)
+                        print(f"Copied {file}")
+    except Exception as e:
+        print("Error copying default sounds:", e)
 
 if __name__ == "__main__":
     MyApp().run()
