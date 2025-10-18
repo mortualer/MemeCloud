@@ -12,12 +12,14 @@ from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
+from kivy.metrics import dp
 import os
 import requests
 import webbrowser
 import json
 import shutil
 from kivy.utils import platform
+from PIL import Image as PILImage
 
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
@@ -35,9 +37,9 @@ class SoundButton(BoxLayout):
         self.sound_id = sound_id or text
         self.orientation = 'horizontal'
         self.size_hint_y = None
-        self.height = 150
-        self.spacing = 10
-        self.padding = [10, 10, 10, 10]
+        self.height = dp(150)
+        self.spacing = dp(10)
+        self.padding = [dp(10), dp(10), dp(10), dp(10)]
         self.sound = sound
         self.btn_text = text
         self.is_expanded = False
@@ -51,14 +53,14 @@ class SoundButton(BoxLayout):
             Color(0, 0, 0, 0.1)
             self.shadow = RoundedRectangle(pos=(self.x - 2, self.y - 2),
                                            size=(self.width + 4, self.height + 4),
-                                           radius=[20])
+                                           radius=[dp(20)])
             self.bg_color = Color(0.25, 0.25, 0.35, 1)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(20)])
 
         self.original_widgets = []
         
         if icon_path and os.path.exists(icon_path):
-            self.icon_widget = Image(source=icon_path, size_hint=(None, 1), width=50)
+            self.icon_widget = Image(source=icon_path, size_hint=(None, 1), width=dp(50))
             self.original_widgets.append(self.icon_widget)
             self.add_widget(self.icon_widget)
 
@@ -158,13 +160,13 @@ class SoundButton(BoxLayout):
     def create_expanded_view(self):
         self.clear_widgets()
         
-        expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
+        expanded_layout = BoxLayout(orientation='vertical', spacing=dp(15), padding=dp(25))
         expanded_layout.bind(on_touch_down=self.on_expanded_touch)
         
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
-            height=120,
+            height=dp(120),
             font_size='24sp',
             bold=True,
             color=(1, 1, 1, 1)
@@ -172,7 +174,7 @@ class SoundButton(BoxLayout):
         title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
         
-        btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
+        btn_layout = BoxLayout(size_hint_y=None, height=dp(120), spacing=dp(15))
         
         delete_btn = Button(
             text='DELETE',
@@ -222,10 +224,10 @@ class SoundButton(BoxLayout):
                 self.app.delete_sound(self)
             popup.dismiss()
         
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         content.add_widget(Label(text=f'Delete "{self.btn_text}"?'))
         
-        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        btn_layout = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(10))
         yes_btn = Button(text='Yes', background_color=(0.8, 0.3, 0.3, 1))
         no_btn = Button(text='No')
         btn_layout.add_widget(yes_btn)
@@ -245,7 +247,7 @@ class SoundButton(BoxLayout):
         self.stop_sound_and_collapse()
         self.restore_original_view()
         
-        anim = Animation(size=(self.width, 150), pos=self.pos, duration=0.3, t='out_quad')
+        anim = Animation(size=(self.width, dp(150)), pos=self.pos, duration=0.3, t='out_quad')
         anim.start(self)
 
     def restore_original_view(self):
@@ -318,26 +320,26 @@ class MyApp(App):
             self.request_android_permissions()
         
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
-        root = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        root = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         
-        top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
+        top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=dp(75), spacing=dp(15))
 
         self.search_input = TextInput(size_hint=(1, 1), hint_text="Search...", multiline=False,
                                       background_color=(0.9, 0.9, 0.95, 1), foreground_color=(0, 0, 0, 1))
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
-        self.pin_button = Button(text="Pin", size_hint=(None, 1), width=100,
+        self.pin_button = Button(text="Pin", size_hint=(None, 1), width=dp(100),
                                  background_color=(0.3, 0.8, 0.3, 1), color=(1, 1, 1, 1))
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=175,
+        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=dp(175),
                                     background_color=(0.5, 0.8, 0.5, 1), color=(1, 1, 1, 1))
         self.upload_button.bind(on_release=self.open_filechooser)
         top_bar.add_widget(self.upload_button)
 
-        self.settings_button = Button(text="i", size_hint=(None, 1), width=100,
+        self.settings_button = Button(text="i", size_hint=(None, 1), width=dp(100),
                                      background_color=(0.4, 0.4, 0.6, 1), color=(1, 1, 1, 1),
                                      font_size='14sp')
         self.settings_button.bind(on_release=self.open_settings)
@@ -346,7 +348,7 @@ class MyApp(App):
         root.add_widget(top_bar)
 
         self.scroll = ScrollView(size_hint=(1, 1))
-        self.layout = DraggableBox(orientation='vertical', spacing=15, size_hint_y=None)
+        self.layout = DraggableBox(orientation='vertical', spacing=dp(15), size_hint_y=None)
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
         root.add_widget(self.scroll)
@@ -466,6 +468,35 @@ class MyApp(App):
             
         return name
 
+    def resize_icon(self, icon_path, max_size=(512, 512)):
+        """Resize icon to optimize for mobile devices"""
+        try:
+            if not os.path.exists(icon_path):
+                return icon_path
+                
+            with PILImage.open(icon_path) as img:
+                # Convert to RGB if necessary
+                if img.mode in ('RGBA', 'LA'):
+                    background = PILImage.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Resize if too large
+                if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
+                    img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+                    
+                    # Save resized image
+                    resized_path = icon_path.replace('.png', '_resized.png')
+                    img.save(resized_path, 'PNG', optimize=True)
+                    return resized_path
+                    
+            return icon_path
+        except Exception as e:
+            print(f"Error resizing icon {icon_path}: {e}")
+            return icon_path
+
     def load_existing_sounds(self):
         print(f"Loading sounds from: {self.save_dir}")
         
@@ -503,6 +534,13 @@ class MyApp(App):
         icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
         if not os.path.exists(icon_file):
             icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
+        
+        # Ресайзим иконку если найдена
+        if os.path.exists(icon_file):
+            try:
+                icon_file = self.resize_icon(icon_file)
+            except Exception as e:
+                print(f"Could not resize icon {icon_file}: {e}")
         
         sound = SoundLoader.load(path)
         if sound:
@@ -550,7 +588,7 @@ class MyApp(App):
     def open_filechooser(self, instance):
         print("Opening file chooser...")
         
-        content = BoxLayout(orientation='vertical', spacing=10)
+        content = BoxLayout(orientation='vertical', spacing=dp(10))
         
         if platform == 'android':
             initial_path = "/storage/emulated/0/"
@@ -564,7 +602,7 @@ class MyApp(App):
         )
         content.add_widget(filechooser)
 
-        btn_box = BoxLayout(size_hint_y=None, height=80, spacing=10)
+        btn_box = BoxLayout(size_hint_y=None, height=dp(80), spacing=dp(10))
         select_btn = Button(text="Select")
         cancel_btn = Button(text="Cancel")
         btn_box.add_widget(select_btn)
@@ -606,20 +644,20 @@ class MyApp(App):
         popup.open()
 
     def open_settings(self, instance):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
+        content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(20))
         
         info_label = Label(
             text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}\n• Icons: {'Loaded' if os.path.exists('icon.png') else 'Missing'}",
             size_hint_y=None,
-            height=200,
-            text_size=(Window.width * 0.8 - 40, None),
+            height=dp(200),
+            text_size=(Window.width * 0.8 - dp(40), None),
             halign='center',
             valign='top'
         )
         info_label.bind(size=info_label.setter('text_size'))
         content.add_widget(info_label)
         
-        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        btn_layout = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(10))
         
         github_btn = Button(text="GitHub", background_color=(0.3, 0.3, 0.5, 1))
         github_btn.bind(on_release=lambda x: webbrowser.open("https://github.com/mortualer/MemeCloud"))
@@ -655,12 +693,12 @@ class MyApp(App):
             visible = value in btn_widget.btn_text.lower()
             btn_widget.opacity = 1 if visible else 0
             btn_widget.disabled = not visible
-            btn_widget.height = 150 if visible else 0
+            btn_widget.height = dp(150) if visible else 0
 
     def show_error_popup(self, message):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         content.add_widget(Label(text=message))
-        close_btn = Button(text="OK", size_hint_y=None, height=50)
+        close_btn = Button(text="OK", size_hint_y=None, height=dp(50))
         content.add_widget(close_btn)
         
         popup = Popup(title="Error", content=content, size_hint=(0.6, 0.3))
@@ -688,13 +726,13 @@ class MyApp(App):
             print(f"Update check error: {e}")
 
     def show_update_popup(self, latest_version, download_url, changelog):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         
         update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
         text_label = Label(
             text=update_text,
             size_hint_y=0.7,
-            text_size=(Window.width * 0.7 - 20, None),
+            text_size=(Window.width * 0.7 - dp(20), None),
             halign='left',
             valign='top'
         )
@@ -704,7 +742,7 @@ class MyApp(App):
         scroll_text.add_widget(text_label)
         content.add_widget(scroll_text)
         
-        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        btn_box = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(10))
         update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
         cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
         btn_box.add_widget(update_btn)
