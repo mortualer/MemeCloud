@@ -12,10 +12,10 @@ fullscreen = 0
 [buildozer]
 log_level = 2
 
-# Простая иконка
+# Адаптивные иконки
 icon.filename = icon.png
-android.adaptive_icon.foreground = icon-foreground.png
-android.adaptive_icon.background = icon-background.png
+android.adaptive_icon_foreground = icon-foreground.png
+android.adaptive_icon_background = icon-background.png
 presplash.filename = icon.png
 
 # Android настройки
@@ -27,8 +27,8 @@ android.ndk = 25b
 android.private_storage = True
 android.arch = arm64-v8a
 
-# Отключаем адаптивные иконки для простоты
-android.adaptive_icon = False
+# Включаем адаптивные иконки
+android.adaptive_icon = True
 
 # Дополнительные настройки
 android.accept_sdk_license = True
@@ -38,3 +38,6 @@ android.allow_backup = True
 
 # Отключаем AAB, собираем только APK
 android.aab = False
+
+# Оптимизация сборки
+android.release_artifact = .apk
