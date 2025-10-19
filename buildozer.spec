@@ -18,7 +18,7 @@ icon.filename = %(source.dir)s/icon.png
 # presplash.filename = %(source.dir)s/presplash.png  # Закомментируйте пока
 #android.adaptive_icon_foreground = icon-foreground.png
 #android.adaptive_icon_background = icon-background.png
-presplash.filename = icon.png
+presplash.filename = %(source.dir)s/icon.png
 
 # Android настройки
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
@@ -27,7 +27,7 @@ android.minapi = 21
 android.sdk = 24
 android.ndk = 25b
 android.private_storage = True
-android.arch = arm64-v8a, armeabi-v7a
+android.arch = arm64-v8a
 
 # Включаем адаптивные иконки
 #android.adaptive_icon = True
