@@ -13,10 +13,9 @@ fullscreen = 0
 log_level = 2
 
 # Иконки
-icon.filename = %(source.dir)s/icon.png
-android.adaptive_icon_foreground = %(source.dir)s/icon-foreground.png
-android.adaptive_icon_background = %(source.dir)s/icon-background.png
-
+icon.filename = icon.png
+android.adaptive_icon.foreground = icon-foreground.png
+android.adaptive_icon.background = icon-background.png
 # Заставка
 presplash.filename = %(source.dir)s/icon.png
 
