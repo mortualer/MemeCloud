@@ -79,6 +79,13 @@ jobs:
           
           echo "✅ Android SDK setup completed"
 
+      - name: 🧹 Clean old build
+        run: |
+         echo "🧼 Cleaning previous build..."
+         buildozer android clean
+
+         
+
       - name: 🏗️ Build AAB
         run: |
           set -e
