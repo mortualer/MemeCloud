@@ -1,109 +1,233 @@
-name: Build Android APK
+name: Build MemeCloud APK
 
 on:
   push:
-    tags:
-      - 'v*'
-  pull_request:
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: 🧩 Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          python3-pip \
-          openjdk-17-jdk \
-          git \
-          zip \
-          unzip \
-          libncurses5 \
-          libncurses5-dev \
-          libssl-dev \
-          zlib1g-dev
+      - name: 📦 Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            python3-pip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libtinfo5 \
+            cmake libffi-dev libssl-dev \
+            curl wget unzip
 
-    - name: Install Buildozer and dependencies
-      run: |
-        pip install --upgrade pip
-        pip install buildozer
-        pip install cython==0.29.33
+      - name: 🔧 Force Java 17 for entire system
+        run: |
+          sudo update-alternatives --set java /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/temurin-17-jdk-amd64/bin/javac
+          echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
+          echo "=== Java Version ==="
+          java -version
 
-    - name: Create buildozer.spec
-      run: |
-        buildozer init
-        # Use simple spec for debug build
-        cat > buildozer.spec << 'EOF'
-[app]
-title = MemeCloud
-package.name = memecloud
-package.domain = org.mortualer
-source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
-version = 1.2.0
-requirements = python3,kivy,requests,android
-orientation = portrait
-fullscreen = 0
+      - name: 🔧 Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer
+          pip install Cython==0.29.33
 
-[buildozer]
-log_level = 2
+      - name: 🛠️ Complete Android SDK setup with Java 17
+        run: |
+          set -e
+          echo "🛠️ Setting up Android SDK with Java 17..."
+          
+          ANDROID_SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$ANDROID_SDK_DIR"
+          
+          # Download command line tools
+          cd "$ANDROID_SDK_DIR"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d cmdline-tools
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/
+          rm cmdline-tools.zip
+          
+          export ANDROID_HOME="$ANDROID_SDK_DIR"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          
+          # Accept licenses
+          mkdir -p "$ANDROID_HOME/licenses"
+          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$ANDROID_HOME/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_HOME/licenses/android-sdk-license"
+          
+          # Install required components with Java 17
+          yes | sdkmanager --install "platform-tools" 2>&1 | grep -v "Warning" || true
+          yes | sdkmanager --install "platforms;android-33" 2>&1 | grep -v "Warning" || true
+          yes | sdkmanager --install "build-tools;33.0.2" 2>&1 | grep -v "Warning" || true
+          
+          # Create necessary symlinks for Buildozer
+          mkdir -p "$ANDROID_HOME/tools/bin"
+          ln -sf "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager" 2>/dev/null || true
+          
+          echo "✅ Android SDK setup completed"
 
-icon.filename = icon.png
-presplash.filename = icon.png
+      - name: 🏗️ Build AAB
+        run: |
+          set -e
+          echo "🚀 Starting AAB build process..."
+          
+          # Set environment variables
+          export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/33.0.2:$PATH"
+          
+          echo "=== Final Environment Check ==="
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "Java: $(java -version 2>&1 | head -1)"
+          
+          # Собираем AAB (это работает надежно)
+          echo "📦 Building AAB file..."
+          buildozer android release
 
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
-android.api = 33
-android.minapi = 21
-android.sdk = 24
-android.ndk = 25b
-android.private_storage = True
-android.arch = arm64-v8a
+      - name: 🔄 Convert AAB to APK
+        run: |
+          set -e
+          echo "🔄 Converting AAB to APK..."
+          
+          # Создаем debug.keystore если его нет
+          echo "🔑 Creating debug.keystore..."
+          keytool -genkey -v -keystore debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          
+          # Скачиваем bundletool
+          wget -q https://github.com/google/bundletool/releases/download/1.15.6/bundletool-all-1.15.6.jar
+          
+          # Ищем AAB файл
+          AAB_FILE=$(find . -name "*.aab" | head -1)
+          
+          if [ -z "$AAB_FILE" ]; then
+            echo "❌ No AAB file found!"
+            exit 1
+          fi
+          
+          echo "📦 Found AAB file: $AAB_FILE"
+          
+          # Создаем device spec для универсального APK
+          cat > device-spec.json << 'EOF'
+          {
+            "supportedAbis": ["arm64-v8a", "armeabi-v7a"],
+            "supportedLocales": ["en", "ru"],
+            "screenDensity": 420,
+            "sdkVersion": 21
+          }
+          EOF
+          
+          # Создаем универсальный APK из AAB
+          echo "📱 Building universal APK from AAB..."
+          java -jar bundletool-all-1.15.6.jar build-apks \
+            --bundle="$AAB_FILE" \
+            --output=./temp.apks \
+            --mode=universal \
+            --ks=debug.keystore \
+            --ks-pass=pass:android \
+            --ks-key-alias=androiddebugkey \
+            --key-pass=pass:android
+          
+          # Извлекаем APK из apks архива
+          echo "📤 Extracting APK from bundle..."
+          unzip -q ./temp.apks -d ./extracted_apks/
+          
+          # Ищем универсальный APK
+          UNIVERSAL_APK=$(find ./extracted_apks -name "*.apk" | head -1)
+          
+          if [ -n "$UNIVERSAL_APK" ]; then
+            # Переименовываем APK
+            APK_NAME="memecloud-1.2.0-universal-release.apk"
+            mv "$UNIVERSAL_APK" "./$APK_NAME"
+            echo "✅ Successfully converted AAB to APK: $APK_NAME"
+            echo "📊 APK file details:"
+            ls -la "./$APK_NAME"
+          else
+            echo "❌ Failed to extract APK from AAB"
+            echo "Contents of extracted_apks:"
+            ls -la ./extracted_apks/
+            exit 1
+          fi
+          
+          # Очистка временных файлов
+          echo "🧹 Cleaning temporary files..."
+          rm -f bundletool-all-1.15.6.jar
+          rm -f device-spec.json
+          rm -f temp.apks
+          rm -rf extracted_apks
+          rm -f debug.keystore
 
-android.accept_sdk_license = True
-p4a.branch = develop
-android.enable_androidx = True
+      - name: 📤 Collect APK files
+        run: |
+          mkdir -p artifacts
+          echo "🔎 Collecting APK files..."
+          
+          # Копируем APK файлы
+          find . -name "*.apk" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          
+          # Также копируем AAB для справки
+          find . -name "*.aab" -type f -exec cp {} artifacts/ \; 2>/dev/null || true
+          
+          APK_COUNT=$(find artifacts -name "*.apk" 2>/dev/null | wc -l)
+          AAB_COUNT=$(find artifacts -name "*.aab" 2>/dev/null | wc -l)
+          
+          echo "📊 Results:"
+          echo "   APK files: $APK_COUNT"
+          echo "   AAB files: $AAB_COUNT"
+          
+          if [ "$APK_COUNT" -eq "0" ]; then
+            echo "❌ No APK files found after conversion"
+            exit 1
+          else
+            echo "✅ SUCCESS: APK files created!"
+            echo "📁 Contents of artifacts directory:"
+            ls -la artifacts/
+          fi
 
-android.aab = False
-EOF
+      - name: 📋 Save build logs
+        if: always()
+        run: |
+          mkdir -p logs
+          echo "💾 Saving build logs..."
+          
+          echo "Build completed at: $(date)" > logs/build_summary.log
+          echo "APK files: $(find artifacts -name "*.apk" 2>/dev/null | wc -l)" >> logs/build_summary.log
+          echo "AAB files: $(find artifacts -name "*.aab" 2>/dev/null | wc -l)" >> logs/build_summary.log
+          
+          find . -name "*.log" -not -path "./logs/*" -exec cp {} logs/ \; 2>/dev/null || true
+          cp buildozer.spec logs/ 2>/dev/null || true
+          
+          echo "📄 Log files:"
+          ls -la logs/
 
-    - name: Debug project structure
-      run: |
-        echo "=== Project files ==="
-        ls -la
-        echo "=== Check icon ==="
-        ls -la icon.png || echo "No icon.png"
+      - name: 🚀 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemeCloud-APK
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
 
-    - name: Create saved_sounds directory
-      run: |
-        mkdir -p saved_sounds
-        touch saved_sounds/test.mp3 || echo "Test file created"
-
-    - name: Build debug APK
-      run: |
-        buildozer -v android debug
-
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: memecloud-debug-apk
-        path: bin/*.apk
-        retention-days: 30
-
-    - name: Create Release on tag
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: bin/*.apk
-        body: |
-          Automatic APK build for MemeCloud
+      - name: 📄 Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Logs
+          path: logs/
+          retention-days: 7
+          if-no-files-found: warn
