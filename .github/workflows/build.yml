@@ -42,6 +42,8 @@ jobs:
 
     - name: Create buildozer.spec
       run: |
+        buildozer init
+        # Use simple spec for debug build
         cat > buildozer.spec << 'EOF'
 [app]
 title = MemeCloud
@@ -73,55 +75,35 @@ p4a.branch = develop
 android.enable_androidx = True
 
 android.aab = False
-android.release_artifact = .apk
 EOF
 
-    - name: Debug - List project files
+    - name: Debug project structure
       run: |
-        echo "=== Project Structure ==="
-        find . -type f -name "*.py" -o -name "*.spec" -o -name "*.json" -o -name "*.png" | head -20
-        echo "=== Buildozer files ==="
+        echo "=== Project files ==="
         ls -la
-        echo "=== Check main.py ==="
-        head -10 main.py
         echo "=== Check icon ==="
-        ls -la icon.png || echo "No icon.png found"
+        ls -la icon.png || echo "No icon.png"
 
-    - name: Create necessary directories
+    - name: Create saved_sounds directory
       run: |
         mkdir -p saved_sounds
-        touch saved_sounds/test.mp3 2>/dev/null || echo "Could not create test.mp3"
+        touch saved_sounds/test.mp3 || echo "Test file created"
 
-    - name: Build APK with Buildozer
+    - name: Build debug APK
       run: |
         buildozer -v android debug
-      continue-on-error: true
 
-    - name: Show build logs on failure
-      if: failure()
-      run: |
-        echo "=== Build Logs ==="
-        find .buildozer -name "*.log" -exec tail -100 {} \; || echo "No build log found"
-        echo "=== Last 50 lines of possible error ==="
-        find .buildozer -name "*.log" -exec tail -50 {} \; | grep -i error || echo "No error lines found"
-
-    - name: Find and upload APK
-      if: success()
+    - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: memecloud-apk
+        name: memecloud-debug-apk
         path: bin/*.apk
         retention-days: 30
 
-    - name: Create Release
+    - name: Create Release on tag
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: bin/*.apk
         body: |
           Automatic APK build for MemeCloud
-          
-          Changes in this version:
-          - Fixed resize handling
-          - Improved Android permissions
-          - Better error handling
