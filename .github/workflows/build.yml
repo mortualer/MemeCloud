@@ -78,12 +78,6 @@ jobs:
           ln -sf "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager" 2>/dev/null || true
           
           echo "✅ Android SDK setup completed"
-
-      - name: 🧹 Clean old build
-        run: |
-         echo "🧼 Cleaning previous build..."
-         buildozer android clean
-
          
 
       - name: 🏗️ Build AAB
