@@ -14,8 +14,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -33,7 +31,8 @@ jobs:
           unzip \
           libncurses5 \
           libncurses5-dev \
-          libssl-dev
+          libssl-dev \
+          zlib1g-dev
 
     - name: Install Buildozer and dependencies
       run: |
@@ -41,10 +40,8 @@ jobs:
         pip install buildozer
         pip install cython==0.29.33
 
-    - name: Configure Buildozer
+    - name: Create buildozer.spec
       run: |
-        buildozer init
-        # Заменяем buildozer.spec на наш обновленный
         cat > buildozer.spec << 'EOF'
 [app]
 title = MemeCloud
@@ -60,11 +57,9 @@ fullscreen = 0
 [buildozer]
 log_level = 2
 
-# Иконки с правильными путями
-icon.filename = %(source.dir)s/icon.png
-presplash.filename = %(source.dir)s/icon.png
+icon.filename = icon.png
+presplash.filename = icon.png
 
-# Android настройки
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
@@ -73,17 +68,15 @@ android.ndk = 25b
 android.private_storage = True
 android.arch = arm64-v8a
 
-# Дополнительные настройки
 android.accept_sdk_license = True
 p4a.branch = develop
 android.enable_androidx = True
 
-# Собираем только APK
 android.aab = False
 android.release_artifact = .apk
 EOF
 
-    - name: 🔍 Debug - List project files
+    - name: Debug - List project files
       run: |
         echo "=== Project Structure ==="
         find . -type f -name "*.py" -o -name "*.spec" -o -name "*.json" -o -name "*.png" | head -20
@@ -91,32 +84,26 @@ EOF
         ls -la
         echo "=== Check main.py ==="
         head -10 main.py
-        echo "=== Check if saved_sounds exists ==="
-        ls -la saved_sounds/ 2>/dev/null || echo "saved_sounds directory not found"
+        echo "=== Check icon ==="
+        ls -la icon.png || echo "No icon.png found"
 
     - name: Create necessary directories
       run: |
         mkdir -p saved_sounds
-        # Создаем тестовый звуковой файл если нужно
-        if [ ! -f "saved_sounds/test.mp3" ]; then
-          echo "Creating test directory structure"
-          touch saved_sounds/test.mp3 2>/dev/null || echo "Could not create test.mp3"
-        fi
+        touch saved_sounds/test.mp3 2>/dev/null || echo "Could not create test.mp3"
 
     - name: Build APK with Buildozer
       run: |
         buildozer -v android debug
       continue-on-error: true
 
-    - name: 📋 Show build logs on failure
+    - name: Show build logs on failure
       if: failure()
       run: |
         echo "=== Build Logs ==="
-        tail -100 .buildozer/android/platform/build-*/build.log || echo "No build log found"
+        find .buildozer -name "*.log" -exec tail -100 {} \; || echo "No build log found"
         echo "=== Last 50 lines of possible error ==="
-        tail -50 .buildozer/android/platform/build-*/build.log 2>/dev/null | grep -i error || echo "No error lines found"
-        echo "=== Directory structure ==="
-        find .buildozer -type f -name "*.py" -o -name "*.txt" -o -name "*.log" | head -20
+        find .buildozer -name "*.log" -exec tail -50 {} \; | grep -i error || echo "No error lines found"
 
     - name: Find and upload APK
       if: success()
