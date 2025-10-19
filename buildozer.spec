@@ -3,43 +3,32 @@ title = MemeCloud
 package.name = memecloud
 package.domain = org.mortualer
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3
+source.include_exts = py,png,jpg,kv,atlas,ttf,json
 version = 1.2.0
-requirements = python3,kivy,requests,android
+requirements = python3,kivy,requests,openssl,android
 orientation = portrait
 fullscreen = 0
 
 [buildozer]
 log_level = 2
 
-# Адаптивные иконки
-# В buildozer.spec
+# Иконки
 icon.filename = %(source.dir)s/icon.png
-# presplash.filename = %(source.dir)s/presplash.png  # Закомментируйте пока
-#android.adaptive_icon_foreground = icon-foreground.png
-#android.adaptive_icon_background = icon-background.png
+android.adaptive_icon_foreground = %(source.dir)s/icon-foreground.png
+android.adaptive_icon_background = %(source.dir)s/icon-background.png
+
+# Заставка
 presplash.filename = %(source.dir)s/icon.png
 
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.sdk = 24
 android.ndk = 25b
 android.private_storage = True
 android.arch = arm64-v8a
-
-# Включаем адаптивные иконки
-#android.adaptive_icon = True
-
-# Дополнительные настройки
-android.accept_sdk_license = True
-p4a.branch = develop
+p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
-
-# Отключаем AAB, собираем только APK
-android.aab = False
-
-# Оптимизация сборки
-android.release_artifact = .apk
+android.release_artifact = True
