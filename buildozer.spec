@@ -10,7 +10,7 @@ orientation = portrait
 fullscreen = 0
 
 # Иконки
-#icon.filename = android/res/mipmap-hdpi/ic_launcher.png
+icon.filename = ic_launcher.png
 android.adaptive_icon.foreground = android/res/mipmap-hdpi/ic_launcher_foreground.png
 android.adaptive_icon.background = android/res/mipmap-hdpi/ic_launcher_background.png
 android.adaptive_icon.monochrome = android/res/mipmap-hdpi/ic_launcher_monochrome.png
