@@ -9,21 +9,21 @@ requirements = python3,kivy,requests,openssl,android
 orientation = portrait
 fullscreen = 0
 
+# Иконки
+icon.filename = android/res/mipmap-hdpi/ic_launcher.png
+android.adaptive_icon.foreground = android/res/mipmap-hdpi/ic_launcher_foreground.png
+android.adaptive_icon.background = android/res/mipmap-hdpi/ic_launcher_background.png
+android.adaptive_icon.monochrome = android/res/mipmap-hdpi/ic_launcher_monochrome.png
+
+# Splash
+presplash.filename = android/res/mipmap-hdpi/ic_launcher.png
+
 [buildozer]
 log_level = 2
-
 android.add_resource = android/res
 
-# Иконки
-icon.filename = icon.png
-android.adaptive_icon.foreground = icon-foreground.png
-android.adaptive_icon.background = icon-background.png
-android.adaptive_icon.monochrome = icon-monochrome.png
-# Заставка
-presplash.filename = %(source.dir)s/icon.png
-
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.sdk = 24
