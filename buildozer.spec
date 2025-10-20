@@ -35,3 +35,6 @@ p4a.branch = stable
 android.enable_androidx = True
 android.allow_backup = True
 android.release_artifact = True
+
+
+android.manifest.intent_filters = <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" />
