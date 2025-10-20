@@ -12,6 +12,8 @@ fullscreen = 0
 [buildozer]
 log_level = 2
 
+android.add_resource = android/res
+
 # Иконки
 icon.filename = icon.png
 android.adaptive_icon.foreground = icon-foreground.png
