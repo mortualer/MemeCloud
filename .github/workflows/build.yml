@@ -43,6 +43,10 @@ jobs:
           pip install buildozer
           pip install Cython==0.29.33
 
+      - name: 🔧 Install Python for Android
+        run: |
+          pip install python-for-android
+
       - name: 🧹 Clean previous build
         run: |
           buildozer android clean
