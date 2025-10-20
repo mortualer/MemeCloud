@@ -10,7 +10,7 @@ orientation = portrait
 fullscreen = 0
 
 # Иконки
-icon.filename = ic_launcher.png
+#icon.filename = ic_launcher.png
 # buildozer.spec
 android.adaptive_icon.foreground = android/res/mipmap-anydpi-v26/ic_launcher_foreground.png
 android.adaptive_icon.background = android/res/mipmap-anydpi-v26/ic_launcher_background.png
