@@ -18,6 +18,14 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: 🧹 Clean previous build
+        run: |
+          buildozer android clean
+
+      - name: 🔎 Check adaptive icon files
+        run: |
+          ls -R android/res/mipmap-anydpi-v26/
+
       - name: 📦 Install system dependencies
         run: |
           sudo apt-get update
