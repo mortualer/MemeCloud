@@ -18,6 +18,7 @@ android.add_resource = android/res
 icon.filename = icon.png
 android.adaptive_icon.foreground = icon-foreground.png
 android.adaptive_icon.background = icon-background.png
+android.adaptive_icon.monochrome = icon-monochrome.png
 # Заставка
 presplash.filename = %(source.dir)s/icon.png
 
