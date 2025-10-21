@@ -142,25 +142,41 @@ class SoundButton(BoxLayout):
     def expand(self, *args):
         if self.is_expanded:
             return
+        
+        # Сворачиваем другие развернутые кнопки
         if self.app:
             for btn in self.app.buttons:
                 if btn != self and btn.is_expanded and not getattr(self.app, "pin_active", False):
                     btn.collapse()
+        
         self.is_expanded = True
+        
+        # Сохраняем оригинальную позицию и размер для возврата
+        self.original_pos = self.pos[:]
+        self.original_size = self.size[:]
+        
+        # Создаем расширенное представление
+        self.create_expanded_view()
         
         # Воспроизводим звук при расширении
         self.play_sound()
-        self.create_expanded_view()
         
-        anim = Animation(pos=(0, 0), size=(Window.width, Window.height), duration=0.3, t='out_quad')
+        # Рассчитываем высоту для расширенного состояния (под верхней панелью)
+        top_bar_height = 75  # Высота верхней панели
+        expanded_height = Window.height - top_bar_height - 20  # -20 для отступов
+        
+        # Анимация расширения
+        anim = Animation(height=expanded_height, 
+                        duration=0.3, 
+                        t='out_quad')
         anim.start(self)
 
     def create_expanded_view(self):
         self.clear_widgets()
         
         expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
-        expanded_layout.bind(on_touch_down=self.on_expanded_touch)
         
+        # Заголовок с возможностью проигрывания по клику
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
@@ -171,6 +187,18 @@ class SoundButton(BoxLayout):
         )
         title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
+        
+        # Кнопка проигрывания
+        play_btn = Button(
+            text='PLAY SOUND',
+            size_hint_y=None,
+            height=80,
+            background_color=(0.3, 0.7, 0.3, 1),
+            color=(1, 1, 1, 1),
+            font_size='20sp'
+        )
+        play_btn.bind(on_press=self.play_sound)
+        expanded_layout.add_widget(play_btn)
         
         btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
         
@@ -197,14 +225,9 @@ class SoundButton(BoxLayout):
         expanded_layout.add_widget(btn_layout)
         self.add_widget(expanded_layout)
 
-    def on_expanded_touch(self, instance, touch):
-        if self.is_expanded and touch.is_double_tap:
-            self.play_sound()
-            return True
-        return False
-
     def on_title_touch(self, instance, touch):
-        if self.is_expanded and instance.collide_point(*touch.pos):
+        """Обработка клика по заголовку для проигрывания звука"""
+        if self.is_expanded and instance.collide_point(*touch.pos) and touch.is_double_tap:
             self.play_sound()
             return True
         return False
@@ -240,13 +263,22 @@ class SoundButton(BoxLayout):
     def collapse(self):
         if not self.is_expanded:
             return
+        
         self.is_expanded = False
         
         self.stop_sound_and_collapse()
-        self.restore_original_view()
         
-        anim = Animation(size=(self.width, 150), pos=self.pos, duration=0.3, t='out_quad')
+        # Анимация возврата к исходной высоте
+        anim = Animation(height=150, 
+                        duration=0.3, 
+                        t='out_quad')
+        anim.bind(on_complete=self.on_collapse_complete)
         anim.start(self)
+
+    def on_collapse_complete(self, *args):
+        """Вызывается после завершения анимации сворачивания"""
+        # Восстанавливаем оригинальное представление
+        self.restore_original_view()
 
     def restore_original_view(self):
         self.clear_widgets()
@@ -260,39 +292,6 @@ class SoundButton(BoxLayout):
         if self.sound_check_event:
             self.sound_check_event.cancel()
             self.sound_check_event = None
-
-    def on_size(self, *args):
-        # Обновляем позицию и размер при изменении размера окна
-        # Добавляем проверку на существование атрибута
-        if hasattr(self, 'is_expanded') and self.is_expanded:
-            self.size = (Window.width, Window.height)
-            self.pos = (0, 0)
-
-class DraggableBox(BoxLayout):
-    def on_touch_down(self, touch):
-        for child in reversed(self.children):
-            if child.collide_point(*touch.pos):
-                child.drag_start_y = touch.y
-                self.dragged = child
-                self.drag_index = self.children.index(child)
-                return super().on_touch_down(touch)
-        return super().on_touch_down(touch)
-
-    def on_touch_move(self, touch):
-        if hasattr(self, 'dragged') and self.dragged:
-            dy = touch.y - self.dragged.drag_start_y
-            self.dragged.y += dy
-            self.dragged.drag_start_y = touch.y
-            children_sorted = sorted(self.children, key=lambda w: w.y, reverse=True)
-            self.clear_widgets()
-            for w in children_sorted:
-                self.add_widget(w)
-            return True
-        return super().on_touch_move(touch)
-
-    def on_touch_up(self, touch):
-        self.dragged = None
-        return super().on_touch_up(touch)
 
 class MyApp(App):
     CURRENT_VERSION = "1.2.0"
@@ -320,15 +319,12 @@ class MyApp(App):
         self.sound_settings = {}
         self.load_settings()
 
-        # Bind window resize event
-        Window.bind(on_resize=self.on_window_resize)
-
     def build(self):
         if platform == 'android':
             self.request_android_permissions()
         
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
-        root = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        self.root = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
@@ -353,18 +349,18 @@ class MyApp(App):
         self.settings_button.bind(on_release=self.open_settings)
         top_bar.add_widget(self.settings_button)
 
-        root.add_widget(top_bar)
+        self.root.add_widget(top_bar)
 
         self.scroll = ScrollView(size_hint=(1, 1))
-        self.layout = DraggableBox(orientation='vertical', spacing=15, size_hint_y=None)
+        self.layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None)
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
-        root.add_widget(self.scroll)
+        self.root.add_widget(self.scroll)
 
         self.load_existing_sounds()
         
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
-        return root
+        return self.root
 
     def on_start(self):
         print("App started")
@@ -378,7 +374,7 @@ class MyApp(App):
             dst_dir = self.save_dir
             if os.path.exists(src_dir):
                 for file in os.listdir(src_dir):
-                    if file.lower().endswith(".mp3"):
+                    if file.lower().endswith((".mp3", ".wav", ".ogg")):
                         src = os.path.join(src_dir, file)
                         dst = os.path.join(dst_dir, file)
                         if not os.path.exists(dst):
@@ -389,42 +385,65 @@ class MyApp(App):
         except Exception as e:
             print("Error copying default sounds:", e)
 
-    def on_window_resize(self, instance, width, height):
-        # Обновляем размеры всех развернутых кнопок при изменении размера окна
-        for btn in self.buttons:
-            if hasattr(btn, 'is_expanded') and btn.is_expanded:
-                btn.size = (width, height)
-                btn.pos = (0, 0)
-
     def request_android_permissions(self):
         if platform == 'android':
             try:
                 print("Requesting Android permissions...")
                 from android.permissions import request_permissions, Permission
                 
-                # Убираем MANAGE_EXTERNAL_STORAGE так как его нет в Android Python
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.MANAGE_EXTERNAL_STORAGE,
+                    Permission.RECORD_AUDIO
                 ]
                 
-                request_permissions(permissions)
+                request_permissions(permissions, self.permission_callback)
                 print("Permissions requested")
                 
             except Exception as e:
                 print(f"Permission request failed: {e}")
+
+    def permission_callback(self, permissions, grant_results):
+        if all(grant_results):
+            print("All permissions granted")
+        else:
+            print("Some permissions were denied")
+            self.show_permission_denied_popup()
+
+    def show_permission_denied_popup(self):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text='This app requires storage permissions to work properly.\nPlease grant permissions in app settings.'))
+        ok_btn = Button(text='OK', size_hint_y=None, height=50)
+        content.add_widget(ok_btn)
+        
+        popup = Popup(title='Permissions Required', content=content, size_hint=(0.8, 0.4))
+        ok_btn.bind(on_release=popup.dismiss)
+        popup.open()
 
     def check_android_permissions(self, dt):
         if platform == 'android':
             try:
                 from android.permissions import check_permission, Permission
                 
-                permissions = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
+                permissions = [
+                    Permission.READ_EXTERNAL_STORAGE, 
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.MANAGE_EXTERNAL_STORAGE,
+                    Permission.RECORD_AUDIO
+                ]
+                
+                granted = True
                 for perm in permissions:
                     if not check_permission(perm):
                         print(f"Permission {perm} not granted")
-                        return
-                print("All permissions granted")
+                        granted = False
+                
+                if granted:
+                    print("All permissions granted")
+                else:
+                    print("Some permissions missing")
+                    self.request_android_permissions()
                 
             except Exception as e:
                 print(f"Permission check error: {e}")
@@ -469,7 +488,7 @@ class MyApp(App):
         
         unwanted_phrases = [
             "Sound Button", "sound button", "SoundButton", "soundbutton",
-            "Sound", "sound", "Button", "button", "MP3", "mp3"
+            "Sound", "sound", "Button", "button", "MP3", "mp3", "WAV", "wav", "OGG", "ogg"
         ]
         
         for phrase in unwanted_phrases:
@@ -491,24 +510,23 @@ class MyApp(App):
             os.makedirs(self.save_dir, exist_ok=True)
             return
         
-        # Очищаем существующие кнопки
         self.layout.clear_widgets()
         self.buttons.clear()
         
-        print("Scanning for MP3 files...")
+        print("Scanning for audio files...")
+        audio_extensions = ('.mp3', '.wav', '.ogg')
         for filename in sorted(os.listdir(self.save_dir)):
-            if filename.lower().endswith('.mp3'):
+            if filename.lower().endswith(audio_extensions):
                 sound_path = os.path.join(self.save_dir, filename)
-                print(f"Found MP3: {filename}")
+                print(f"Found audio file: {filename}")
                 self.add_sound_button(sound_path)
         
         print(f"Total sounds loaded: {len(self.buttons)}")
 
     def add_sound_button(self, path):
-        # Проверяем если этот звук уже существует в кнопках
         for btn in self.buttons:
             if btn.sound_id in path:
-                return  # Пропускаем если уже существует
+                return
         
         filename = os.path.basename(path)
         btn_text = self.clean_sound_name(filename)
@@ -516,14 +534,13 @@ class MyApp(App):
         
         print(f"Loading sound: {filename}")
         
-        # Ищем иконку
         icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
         if not os.path.exists(icon_file):
             icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
         
         sound = SoundLoader.load(path)
         if sound:
-            print(f"Sound loaded: {filename}")
+            print(f"Sound loaded successfully: {filename}")
             btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
             
             if sound_id in self.sound_settings:
@@ -532,7 +549,8 @@ class MyApp(App):
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
         else:
-            print(f"Failed to load: {filename}")
+            print(f"Failed to load sound: {filename}")
+            self.show_error_popup(f"Failed to load sound: {filename}")
 
     def delete_sound(self, sound_button):
         try:
@@ -575,7 +593,7 @@ class MyApp(App):
             initial_path = "/"
             
         filechooser = FileChooserListView(
-            filters=['*.mp3'], 
+            filters=['*.mp3', '*.wav', '*.ogg'],
             path=initial_path,
             size_hint=(1, 0.8)
         )
@@ -588,7 +606,7 @@ class MyApp(App):
         btn_box.add_widget(cancel_btn)
         content.add_widget(btn_box)
 
-        popup = Popup(title="Select MP3 File", content=content, size_hint=(0.9, 0.9))
+        popup = Popup(title="Select Audio File", content=content, size_hint=(0.9, 0.9))
 
         def select_file(instance):
             if filechooser.selection:
@@ -605,7 +623,6 @@ class MyApp(App):
                                 new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                                 counter += 1
                         
-                        import shutil
                         shutil.copy2(path, new_path)
                         print(f"Copied to: {new_path}")
                         
@@ -744,4 +761,4 @@ class MyApp(App):
         popup.open()
 
 if __name__ == "__main__":
-    MyApp().run()
+    MyApp().run
