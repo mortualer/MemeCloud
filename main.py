@@ -532,19 +532,19 @@ class MyApp(App):
             possible_paths = [
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "saved_sounds"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "saved_sounds"),  # Для GitHub структуры
             ]
             
             source_dir = None
             for path in possible_paths:
                 if os.path.exists(path) and os.path.isdir(path):
                     source_dir = path
+                    print(f"Found built-in sounds at: {source_dir}")
                     break
             
             if not source_dir:
                 print("No built-in sounds directory found")
                 return
-            
-            print(f"Found built-in sounds at: {source_dir}")
             
             # Копируем файлы
             copied_count = 0
@@ -561,7 +561,7 @@ class MyApp(App):
             
             if copied_count > 0:
                 print(f"Copied {copied_count} built-in sounds")
-                # Перезагружаем звуки
+                # Перезагружаем звуки после копирования ВСЕХ файлов
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
             else:
                 print("No new sounds to copy")
@@ -711,7 +711,6 @@ class MyApp(App):
     def add_sound_button_and_refresh(self, path):
         """Добавляет кнопку звука и обновляет интерфейс"""
         if self.add_sound_button(path):
-            self.show_info_popup("Success", f"Sound added successfully!")
             # Обновляем список звуков
             Clock.schedule_once(self.delayed_load_sounds, 0.2)
 
@@ -1002,90 +1001,50 @@ class MyApp(App):
             self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
     def open_android_folder_picker(self):
-        """Открывает выбор папки на Android"""
+        """Открывает выбор папки на Android с использованием androidstorage4kivy"""
         try:
-            from jnius import autoclass
-            from android import activity
-            
-            Intent = autoclass('android.content.Intent')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            context = PythonActivity.mActivity
-            
-            # Используем ACTION_OPEN_DOCUMENT_TREE для выбора папки (доступно с API 21)
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-            
-            # Регистрируем обработчик результата
-            def on_activity_result(request_code, result_code, intent):
-                print(f"Folder picker result: {request_code}, {result_code}")
-                if request_code == 124:
-                    if result_code == -1:  # RESULT_OK
-                        uri = intent.getData()
-                        if uri:
-                            self.process_android_folder(uri)
-                    # Убираем обработчик
-                    activity.unbind(on_activity_result=on_activity_result)
-            
-            # Устанавливаем обработчик
-            activity.bind(on_activity_result=on_activity_result)
-            
-            # Запускаем активность
-            context.startActivityForResult(intent, 124)
-            print("Android folder picker started")
-            
+            # Проверяем доступность библиотеки
+            try:
+                from androidstorage4kivy import ShareSheet
+                
+                # Создаем и открываем системный интерфейс выбора папки
+                share_sheet = ShareSheet()
+                share_sheet.share_content(share_type="folder", 
+                                        callback=self.process_android_folder_content)
+                print("Android folder picker started with androidstorage4kivy")
+                
+            except ImportError:
+                print("androidstorage4kivy not available, using alternative method")
+                self.open_android_file_picker()  # Фолбэк на выбор файлов
+                
         except Exception as e:
             print(f"Error opening Android folder picker: {e}")
             self.show_error_popup(f"Cannot open folder picker: {str(e)}")
 
-    def process_android_folder(self, folder_uri):
-        """Обрабатывает выбранную папку на Android"""
-        try:
-            from jnius import autoclass
+    def process_android_folder_content(self, share_result):
+        """Обрабатывает содержимое выбранной папки через androidstorage4kivy"""
+        if not share_result:
+            print("No folder content received")
+            return
             
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            DocumentsContract = autoclass('android.provider.DocumentsContract')
-            ContentResolver = autoclass('android.content.ContentResolver')
-            context = PythonActivity.mActivity
-            content_resolver = context.getContentResolver()
-            
-            # Получаем документы из папки
-            children_uris = DocumentsContract.buildChildDocumentsUriUsingTree(
-                folder_uri, 
-                DocumentsContract.getDocumentId(folder_uri)
-            )
-            
-            cursor = content_resolver.query(
-                children_uris,
-                None, None, None, None
-            )
-            
-            if not cursor:
-                self.show_info_popup("No Files", "No audio files found in selected folder")
-                return
-            
-            processed_count = 0
-            try:
-                while cursor.moveToNext():
-                    display_name_index = cursor.getColumnIndex("_display_name")
-                    if display_name_index != -1:
-                        filename = cursor.getString(display_name_index)
-                        if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
-                            document_id = cursor.getString(cursor.getColumnIndex("document_id"))
-                            document_uri = DocumentsContract.buildDocumentUriUsingTree(
-                                folder_uri, document_id
-                            )
-                            self.process_android_uri(document_uri)
-                            processed_count += 1
-            finally:
-                cursor.close()
-            
-            if processed_count == 0:
-                self.show_info_popup("No Audio Files", "No audio files found in selected folder")
-            else:
-                self.show_info_popup("Success", f"Processing {processed_count} audio files...")
+        file_list = share_result.get('file_list', [])
+        if not file_list:
+            self.show_info_popup("No Files", "No files found in selected folder")
+            return
+        
+        print(f"Processing {len(file_list)} files from folder")
+        
+        processed_count = 0
+        for file_uri in file_list:
+            # Копируем каждый файл используя URI
+            if self.process_android_uri(file_uri):
+                processed_count += 1
                 
-        except Exception as e:
-            print(f"Error processing folder: {e}")
-            self.show_error_popup(f"Error processing folder: {str(e)}")
+        if processed_count > 0:
+            self.show_info_popup("Success", f"Added {processed_count} audio files from folder")
+            Clock.schedule_once(self.delayed_load_sounds, 0.5)
+        else:
+            self.show_info_popup("No Audio Files", "No supported audio files found in folder")
 
     def open_desktop_file_picker(self):
         """Файловый пикер для desktop"""
