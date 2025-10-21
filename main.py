@@ -128,8 +128,8 @@ class SoundButton(BoxLayout):
             # Сворачиваем если развернуто и не закреплено
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
-            return False  # Останавливаем проверку
-        return True  # Продолжаем проверку
+            return False # Останавливаем проверку
+        return True # Продолжаем проверку
 
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
@@ -165,8 +165,8 @@ class SoundButton(BoxLayout):
         self.create_expanded_view()
         
         # Рассчитываем высоту для расширенного состояния (под верхней панелью)
-        top_bar_height = 75  # Высота верхней панели
-        expanded_height = Window.height - top_bar_height - 20  # -20 для отступов
+        top_bar_height = 75 # Высота верхней панели
+        expanded_height = Window.height - top_bar_height - 20 # -20 для отступов
         
         # Плавная анимация расширения
         anim = Animation(
@@ -420,51 +420,40 @@ class MyApp(App):
             Window.clearcolor = (0.95, 0.95, 0.98, 1)
             self.root = BoxLayout(orientation='vertical', spacing=10, padding=10)
             
-            # Простой лейбл для отладки
-            debug_label = Label(
-                text="MemeCloud Loading...",
-                size_hint=(1, 1),
-                font_size='20sp'
-            )
-            self.root.add_widget(debug_label)
+            # Сразу создаем основной интерфейс
+            self.create_main_interface()
             
-            # Запрашиваем разрешения после создания интерфейса
+            # Загружаем звуки
+            Clock.schedule_once(self.delayed_load_sounds, 0.5)
+            
+            # Запрашиваем разрешения на Android
             if platform == 'android':
-                Clock.schedule_once(self.delayed_init, 1)
-            else:
-                Clock.schedule_once(self.delayed_init, 0.5)
+                Clock.schedule_once(self.request_android_permissions, 1)
                 
+            # Проверяем обновления
+            Clock.schedule_once(self.delayed_check_update, 3)
+            
             return self.root
             
         except Exception as e:
             print(f"Error in build: {e}")
             # Фолбэк интерфейс
-            from kivy.uix.label import Label
-            return Label(text=f"Error: {str(e)}")
+            error_label = Label(text=f"Error: {str(e)}", font_size='20sp')
+            return error_label
 
-    def delayed_init(self, dt):
-        """Отложенная инициализация после создания интерфейса"""
+    def delayed_load_sounds(self, dt):
+        """Отложенная загрузка звуков"""
         try:
-            print("Starting delayed initialization...")
-            
-            # Очищаем корневой виджет
-            self.root.clear_widgets()
-            
-            # Создаем основной интерфейс
-            self.create_main_interface()
-            
-            # Загружаем звуки
             self.load_existing_sounds()
-            
-            # Запрашиваем разрешения на Android
-            if platform == 'android':
-                self.request_android_permissions()
-                
-            print("Delayed initialization completed")
-            
         except Exception as e:
-            print(f"Error in delayed_init: {e}")
-            self.show_error_popup(f"Initialization error: {str(e)}")
+            print(f"Error in delayed_load_sounds: {e}")
+
+    def delayed_check_update(self, dt):
+        """Отложенная проверка обновлений"""
+        try:
+            self.check_for_update()
+        except Exception as e:
+            print(f"Error in delayed_check_update: {e}")
 
     def create_main_interface(self):
         """Создает основной интерфейс приложения"""
@@ -572,14 +561,14 @@ class MyApp(App):
             if copied_count > 0:
                 print(f"Copied {copied_count} built-in sounds")
                 # Перезагружаем звуки
-                Clock.schedule_once(lambda dt: self.load_existing_sounds(), 0.5)
+                Clock.schedule_once(self.delayed_load_sounds, 0.5)
             else:
                 print("No new sounds to copy")
                 
         except Exception as e:
             print(f"Error copying built-in sounds: {e}")
 
-    def request_android_permissions(self):
+    def request_android_permissions(self, dt=None):
         """Запрашивает разрешения на Android"""
         if platform == 'android':
             try:
@@ -615,9 +604,6 @@ class MyApp(App):
         else:
             print("Some permissions denied")
             self.permissions_granted = False
-            
-        # Обновляем интерфейс
-        Clock.schedule_once(lambda dt: self.load_existing_sounds(), 0.5)
 
     def load_settings(self):
         """Загружает настройки приложения"""
@@ -783,6 +769,8 @@ class MyApp(App):
                         del self.sound_settings[sound_id]
                         self.save_sound_settings()
                     
+                    # Перезагружаем список звуков
+                    Clock.schedule_once(self.delayed_load_sounds, 0.1)
                     break
                     
         except Exception as e:
@@ -793,12 +781,13 @@ class MyApp(App):
         """Показывает опции загрузки"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
-        content.add_widget(Label(
+        title_label = Label(
             text="How do you want to add sounds?",
             size_hint_y=None,
             height=50,
             font_size='18sp'
-        ))
+        )
+        content.add_widget(title_label)
         
         btn_layout = BoxLayout(orientation='vertical', spacing=10, size_hint_y=None, height=150)
         
@@ -808,7 +797,6 @@ class MyApp(App):
             height=60,
             background_color=(0.3, 0.6, 0.9, 1)
         )
-        file_btn.bind(on_release=lambda x: (self.open_file_picker(), popup.dismiss()))
         
         folder_btn = Button(
             text="Select Folder",
@@ -816,7 +804,6 @@ class MyApp(App):
             height=60,
             background_color=(0.4, 0.7, 0.4, 1)
         )
-        folder_btn.bind(on_release=lambda x: (self.open_folder_picker(), popup.dismiss()))
         
         btn_layout.add_widget(file_btn)
         btn_layout.add_widget(folder_btn)
@@ -837,8 +824,22 @@ class MyApp(App):
             auto_dismiss=False
         )
         
+        # Используем слабые ссылки для избежания проблем с областью видимости
+        file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
+        folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         cancel_btn.bind(on_release=popup.dismiss)
+        
         popup.open()
+
+    def _file_picker_selected(self, popup):
+        """Обработчик выбора файлового пикера"""
+        popup.dismiss()
+        self.open_file_picker()
+
+    def _folder_picker_selected(self, popup):
+        """Обработчик выбора папки"""
+        popup.dismiss()
+        self.open_folder_picker()
 
     def open_file_picker(self):
         """Открывает выбор файлов"""
