@@ -21,6 +21,8 @@ from kivy.utils import platform
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
     from android.storage import app_storage_path
+    from android import mActivity
+    from jnius import autoclass, cast
 
 # -------------------------
 # SoundButton Class
@@ -128,8 +130,8 @@ class SoundButton(BoxLayout):
             # Сворачиваем если развернуто и не закреплено
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
-            return False # Останавливаем проверку
-        return True # Продолжаем проверку
+            return False  # Останавливаем проверку
+        return True  # Продолжаем проверку
 
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
@@ -165,8 +167,8 @@ class SoundButton(BoxLayout):
         self.create_expanded_view()
         
         # Рассчитываем высоту для расширенного состояния (под верхней панелью)
-        top_bar_height = 75 # Высота верхней панели
-        expanded_height = Window.height - top_bar_height - 20 # -20 для отступов
+        top_bar_height = 75  # Высота верхней панели
+        expanded_height = Window.height - top_bar_height - 20  # -20 для отступов
         
         # Плавная анимация расширения
         anim = Animation(
@@ -433,6 +435,11 @@ class MyApp(App):
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
+            # Регистрируем обработчик активности для Android
+            if platform == 'android':
+                from android import mActivity
+                mActivity.bind(on_activity_result=self.on_activity_result)
+            
             return self.root
             
         except Exception as e:
@@ -604,6 +611,101 @@ class MyApp(App):
         else:
             print("Some permissions denied")
             self.permissions_granted = False
+
+    def on_activity_result(self, request_code, result_code, intent):
+        """Обрабатывает результат выбора файлов на Android"""
+        if request_code != 123:
+            return
+            
+        try:
+            if result_code == -1:  # RESULT_OK
+                from jnius import autoclass
+                
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                ClipData = autoclass('android.content.ClipData')
+                
+                clip_data = intent.getClipData()
+                
+                if clip_data is not None:
+                    # Множественный выбор
+                    count = clip_data.getItemCount()
+                    for i in range(count):
+                        uri = clip_data.getItemAt(i).getUri()
+                        self.process_android_uri(uri)
+                else:
+                    # Одиночный выбор
+                    uri = intent.getData()
+                    if uri is not None:
+                        self.process_android_uri(uri)
+                        
+        except Exception as e:
+            print(f"Error processing activity result: {e}")
+            self.show_error_popup(f"Error processing selected files: {str(e)}")
+
+    def process_android_uri(self, uri):
+        """Обрабатывает URI файла на Android"""
+        try:
+            from jnius import autoclass
+            from android import mActivity
+            
+            Context = autoclass('android.content.Context')
+            ContentResolver = autoclass('android.content.ContentResolver')
+            
+            # Получаем контекст
+            context = mActivity.getApplicationContext()
+            content_resolver = context.getContentResolver()
+            
+            # Получаем имя файла
+            cursor = content_resolver.query(uri, None, None, None, None)
+            if cursor and cursor.moveToFirst():
+                display_name_index = cursor.getColumnIndex("_display_name")
+                if display_name_index != -1:
+                    filename = cursor.getString(display_name_index)
+                else:
+                    filename = "audio_file"
+                cursor.close()
+            else:
+                filename = "audio_file"
+            
+            # Проверяем расширение файла
+            if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                print(f"Skipping non-audio file: {filename}")
+                return
+            
+            # Создаем путь для сохранения
+            new_path = os.path.join(self.save_dir, filename)
+            
+            # Если файл с таким именем уже существует, добавляем номер
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(new_path):
+                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                    counter += 1
+            
+            # Копируем содержимое файла
+            input_stream = content_resolver.openInputStream(uri)
+            with open(new_path, 'wb') as out_file:
+                # Читаем и записываем файл по частям
+                buffer_size = 8192
+                buffer = bytearray(buffer_size)
+                bytes_read = input_stream.read(buffer)
+                while bytes_read != -1:
+                    out_file.write(buffer[:bytes_read])
+                    bytes_read = input_stream.read(buffer)
+            
+            input_stream.close()
+            
+            print(f"Copied to: {new_path}")
+            
+            # Добавляем кнопку звука
+            if self.add_sound_button(new_path):
+                self.show_info_popup("Success", f"Sound '{filename}' added successfully!")
+                
+        except Exception as e:
+            print(f"Error processing Android URI: {e}")
+            self.show_error_popup(f"Error processing file: {str(e)}")
 
     def load_settings(self):
         """Загружает настройки приложения"""
@@ -844,7 +946,7 @@ class MyApp(App):
     def open_file_picker(self):
         """Открывает выбор файлов"""
         if platform == 'android':
-            self.show_error_popup("File selection not available on Android yet")
+            self.open_android_file_picker()
         else:
             self.open_desktop_file_picker()
 
@@ -854,6 +956,28 @@ class MyApp(App):
             self.show_error_popup("Folder selection not available on Android yet")
         else:
             self.open_desktop_folder_picker()
+
+    def open_android_file_picker(self):
+        """Открывает файловый пикер на Android"""
+        try:
+            from jnius import autoclass
+            from android import mActivity
+            
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            
+            # Создаем Intent для выбора файла с поддержкой множественного выбора
+            intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.setType("audio/*")
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
+            
+            # Запускаем активность
+            mActivity.startActivityForResult(intent, 123)
+            
+        except Exception as e:
+            print(f"Error opening Android file picker: {e}")
+            self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
     def open_desktop_file_picker(self):
         """Файловый пикер для desktop"""
