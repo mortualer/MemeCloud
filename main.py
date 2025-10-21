@@ -546,8 +546,8 @@ class MyApp(App):
                 print("No built-in sounds directory found")
                 return
             
-            # Копируем файлы
-            copied_count = 0
+            # Собираем все файлы для копирования
+            files_to_copy = []
             for filename in os.listdir(source_dir):
                 if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                     src_path = os.path.join(source_dir, filename)
@@ -555,13 +555,24 @@ class MyApp(App):
                     
                     # Копируем только если файл еще не существует
                     if not os.path.exists(dst_path):
+                        files_to_copy.append((src_path, dst_path, filename))
+            
+            if files_to_copy:
+                print(f"Found {len(files_to_copy)} new sounds to copy")
+                
+                # Копируем все файлы сразу
+                copied_count = 0
+                for src_path, dst_path, filename in files_to_copy:
+                    try:
                         shutil.copy2(src_path, dst_path)
                         copied_count += 1
                         print(f"Copied: {filename}")
-            
-            if copied_count > 0:
-                print(f"Copied {copied_count} built-in sounds")
-                # Перезагружаем звуки после копирования ВСЕХ файлов
+                    except Exception as e:
+                        print(f"Error copying {filename}: {e}")
+                
+                print(f"Successfully copied {copied_count} built-in sounds")
+                
+                # ОДИН раз обновляем интерфейс после копирования всех файлов
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
             else:
                 print("No new sounds to copy")
@@ -622,6 +633,7 @@ class MyApp(App):
                 ClipData = autoclass('android.content.ClipData')
                 
                 clip_data = intent.getClipData()
+                processed_files = []
                 
                 if clip_data is not None:
                     # Множественный выбор
@@ -630,14 +642,25 @@ class MyApp(App):
                     for i in range(count):
                         uri = clip_data.getItemAt(i).getUri()
                         print(f"Processing URI {i+1}: {uri}")
-                        self.process_android_uri(uri)
+                        result = self.process_android_uri(uri)
+                        if result:
+                            processed_files.append(result)
                 else:
                     # Одиночный выбор
                     uri = intent.getData()
                     if uri is not None:
                         print(f"Single file selected: {uri}")
-                        self.process_android_uri(uri)
-                print("File processing completed")
+                        result = self.process_android_uri(uri)
+                        if result:
+                            processed_files.append(result)
+                
+                print(f"File processing completed. Processed {len(processed_files)} files")
+                
+                # Обновляем интерфейс ОДИН раз после обработки всех файлов
+                if processed_files:
+                    Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                    self.show_info_popup("Success", f"Added {len(processed_files)} audio files")
+                
             else:
                 print("User cancelled file selection")
                 
@@ -646,7 +669,7 @@ class MyApp(App):
             self.show_error_popup(f"Error processing selected files: {str(e)}")
 
     def process_android_uri(self, uri):
-        """Обрабатывает URI файла на Android"""
+        """Обрабатывает URI файла на Android и возвращает имя файла если успешно"""
         try:
             from jnius import autoclass
             
@@ -671,7 +694,7 @@ class MyApp(App):
             # Проверяем расширение файла
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                 print(f"Skipping non-audio file: {filename}")
-                return
+                return None
             
             print(f"Processing audio file: {filename}")
             
@@ -700,19 +723,12 @@ class MyApp(App):
             input_stream.close()
             
             print(f"Successfully copied to: {new_path}")
-            
-            # Добавляем кнопку звука
-            Clock.schedule_once(lambda dt: self.add_sound_button_and_refresh(new_path), 0.1)
+            return filename
                 
         except Exception as e:
             print(f"Error processing Android URI: {e}")
             self.show_error_popup(f"Error processing file: {str(e)}")
-
-    def add_sound_button_and_refresh(self, path):
-        """Добавляет кнопку звука и обновляет интерфейс"""
-        if self.add_sound_button(path):
-            # Обновляем список звуков
-            Clock.schedule_once(self.delayed_load_sounds, 0.2)
+            return None
 
     def load_settings(self):
         """Загружает настройки приложения"""
@@ -787,12 +803,18 @@ class MyApp(App):
         audio_extensions = ('.mp3', '.wav', '.ogg')
         found_files = False
         
+        # Собираем все файлы сначала
+        sound_files = []
         for filename in sorted(os.listdir(self.save_dir)):
             if filename.lower().endswith(audio_extensions):
                 sound_path = os.path.join(self.save_dir, filename)
-                print(f"Found audio file: {filename}")
-                self.add_sound_button(sound_path)
+                sound_files.append((sound_path, filename))
                 found_files = True
+        
+        # Затем добавляем все кнопки сразу
+        for sound_path, filename in sound_files:
+            print(f"Found audio file: {filename}")
+            self.add_sound_button(sound_path)
         
         print(f"Total sounds loaded: {len(self.buttons)}")
         
@@ -909,15 +931,18 @@ class MyApp(App):
             background_color=(0.3, 0.6, 0.9, 1)
         )
         
-        folder_btn = Button(
-            text="Select Folder",
-            size_hint_y=None,
-            height=60,
-            background_color=(0.4, 0.7, 0.4, 1)
-        )
+        # На Android показываем только кнопку выбора файлов
+        if platform != 'android':
+            folder_btn = Button(
+                text="Select Folder",
+                size_hint_y=None,
+                height=60,
+                background_color=(0.4, 0.7, 0.4, 1)
+            )
+            folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
+            btn_layout.add_widget(folder_btn)
         
         btn_layout.add_widget(file_btn)
-        btn_layout.add_widget(folder_btn)
         content.add_widget(btn_layout)
         
         cancel_btn = Button(
@@ -935,9 +960,7 @@ class MyApp(App):
             auto_dismiss=False
         )
         
-        # Используем слабые ссылки для избежания проблем с областью видимости
         file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
-        folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         cancel_btn.bind(on_release=popup.dismiss)
         
         popup.open()
@@ -962,7 +985,8 @@ class MyApp(App):
     def open_folder_picker(self):
         """Открывает выбор папки"""
         if platform == 'android':
-            self.open_android_folder_picker()
+            # На Android используем множественный выбор файлов вместо папки
+            self.show_info_popup("Info", "On Android, please use 'Select Audio Files' for multiple file selection")
         else:
             self.open_desktop_folder_picker()
 
@@ -1000,52 +1024,6 @@ class MyApp(App):
             print(f"Error opening Android file picker: {e}")
             self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
-    def open_android_folder_picker(self):
-        """Открывает выбор папки на Android с использованием androidstorage4kivy"""
-        try:
-            # Проверяем доступность библиотеки
-            try:
-                from androidstorage4kivy import ShareSheet
-                
-                # Создаем и открываем системный интерфейс выбора папки
-                share_sheet = ShareSheet()
-                share_sheet.share_content(share_type="folder", 
-                                        callback=self.process_android_folder_content)
-                print("Android folder picker started with androidstorage4kivy")
-                
-            except ImportError:
-                print("androidstorage4kivy not available, using alternative method")
-                self.open_android_file_picker()  # Фолбэк на выбор файлов
-                
-        except Exception as e:
-            print(f"Error opening Android folder picker: {e}")
-            self.show_error_popup(f"Cannot open folder picker: {str(e)}")
-
-    def process_android_folder_content(self, share_result):
-        """Обрабатывает содержимое выбранной папки через androidstorage4kivy"""
-        if not share_result:
-            print("No folder content received")
-            return
-            
-        file_list = share_result.get('file_list', [])
-        if not file_list:
-            self.show_info_popup("No Files", "No files found in selected folder")
-            return
-        
-        print(f"Processing {len(file_list)} files from folder")
-        
-        processed_count = 0
-        for file_uri in file_list:
-            # Копируем каждый файл используя URI
-            if self.process_android_uri(file_uri):
-                processed_count += 1
-                
-        if processed_count > 0:
-            self.show_info_popup("Success", f"Added {processed_count} audio files from folder")
-            Clock.schedule_once(self.delayed_load_sounds, 0.5)
-        else:
-            self.show_info_popup("No Audio Files", "No supported audio files found in folder")
-
     def open_desktop_file_picker(self):
         """Файловый пикер для desktop"""
         try:
@@ -1062,8 +1040,14 @@ class MyApp(App):
             root.destroy()
             
             if file_paths:
+                processed_count = 0
                 for file_path in file_paths:
-                    self.copy_audio_file(file_path)
+                    if self.copy_audio_file(file_path):
+                        processed_count += 1
+                
+                if processed_count > 0:
+                    self.show_info_popup("Success", f"Added {processed_count} audio files")
+                    Clock.schedule_once(self.delayed_load_sounds, 0.5)
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
@@ -1094,7 +1078,7 @@ class MyApp(App):
             filename = os.path.basename(file_path)
             
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
-                return
+                return False
             
             new_path = os.path.join(self.save_dir, filename)
             
@@ -1110,12 +1094,11 @@ class MyApp(App):
             print(f"Copied to: {new_path}")
             
             # Добавляем кнопку
-            if self.add_sound_button(new_path):
-                self.show_info_popup("Success", f"Added: {filename}")
+            return self.add_sound_button(new_path)
                 
         except Exception as e:
             print(f"Error copying file: {e}")
-            self.show_error_popup(f"Error copying file: {str(e)}")
+            return False
 
     def copy_audio_from_folder(self, folder_path):
         """Копирует все аудио файлы из папки"""
@@ -1135,7 +1118,11 @@ class MyApp(App):
                 if self.copy_audio_file(src_path):
                     copied_count += 1
             
-            self.show_info_popup("Complete", f"Added {copied_count} audio files")
+            if copied_count > 0:
+                self.show_info_popup("Complete", f"Added {copied_count} audio files")
+                Clock.schedule_once(self.delayed_load_sounds, 0.5)
+            else:
+                self.show_info_popup("Error", "No files were added")
             
         except Exception as e:
             print(f"Error copying from folder: {e}")
