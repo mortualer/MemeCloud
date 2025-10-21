@@ -10,7 +10,6 @@ from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.popup import Popup
-from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
 import os
 import requests
@@ -21,7 +20,9 @@ from kivy.utils import platform
 
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
-    from android.storage import primary_external_storage_path, app_storage_path
+    from android.storage import app_storage_path
+    from android import mActivity
+    from jnius import autoclass, cast
 
 # -------------------------
 # SoundButton Class
@@ -390,7 +391,7 @@ class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Упрощенная логика путей - всегда используем внутреннее хранилище
+        # Всегда используем внутреннее хранилище приложения
         if platform == 'android':
             try:
                 from android.storage import app_storage_path
@@ -399,7 +400,6 @@ class MyApp(App):
                 print(f"Using app storage: {base_dir}")
             except Exception as e:
                 print(f"Error getting app storage: {e}")
-                # Fallback для других платформ
                 self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
         else:
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
@@ -460,7 +460,7 @@ class MyApp(App):
             color=(1, 1, 1, 1),
             font_size='14sp'
         )
-        self.upload_button.bind(on_release=self.open_filechooser)
+        self.upload_button.bind(on_release=self.open_file_picker)
         top_bar.add_widget(self.upload_button)
 
         self.settings_button = Button(
@@ -505,14 +505,18 @@ class MyApp(App):
                 print("Requesting Android permissions...")
                 from android.permissions import request_permissions, Permission
                 
-                # Запрашиваем только необходимые разрешения
+                # Запрашиваем только необходимые разрешения для Android 10+
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
                 ]
                 
-                # Для Android 10+ может потребоваться MANAGE_EXTERNAL_STORAGE
-                # но это ограничено политиками Google Play
+                # Для Android 13+ нужны другие разрешения
+                if hasattr(Permission, 'READ_MEDIA_AUDIO'):
+                    permissions = [
+                        Permission.READ_MEDIA_AUDIO,
+                        Permission.READ_MEDIA_IMAGES,
+                    ]
                 
                 request_permissions(permissions, self.permission_callback)
                 print("Permissions requested")
@@ -535,12 +539,18 @@ class MyApp(App):
     def show_permission_denied_popup(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Label(
-            text='This app requires storage permissions to work properly.\n\nWithout permissions, you can only use built-in sounds.',
+            text='This app needs storage permissions to access audio files.\n\nYou can still use built-in sounds.',
             text_size=(Window.width * 0.8 - 20, None),
             halign='center'
         ))
-        ok_btn = Button(text='OK', size_hint_y=None, height=50)
-        content.add_widget(ok_btn)
+        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        
+        retry_btn = Button(text='Retry Permission', size_hint_x=0.6)
+        ok_btn = Button(text='OK', size_hint_x=0.4)
+        
+        btn_layout.add_widget(retry_btn)
+        btn_layout.add_widget(ok_btn)
+        content.add_widget(btn_layout)
         
         popup = Popup(
             title='Permissions Required', 
@@ -548,6 +558,8 @@ class MyApp(App):
             size_hint=(0.8, 0.4),
             auto_dismiss=False
         )
+        
+        retry_btn.bind(on_release=lambda x: (self.request_android_permissions(), popup.dismiss()))
         ok_btn.bind(on_release=popup.dismiss)
         popup.open()
 
@@ -556,23 +568,27 @@ class MyApp(App):
             try:
                 from android.permissions import check_permission, Permission
                 
-                permissions = [
+                # Проверяем актуальные разрешения
+                permissions_to_check = [
                     Permission.READ_EXTERNAL_STORAGE, 
                     Permission.WRITE_EXTERNAL_STORAGE,
                 ]
                 
-                granted = True
-                for perm in permissions:
-                    if not check_permission(perm):
-                        print(f"Permission {perm} not granted")
-                        granted = False
+                # Для Android 13+
+                if hasattr(Permission, 'READ_MEDIA_AUDIO'):
+                    permissions_to_check = [
+                        Permission.READ_MEDIA_AUDIO,
+                        Permission.READ_MEDIA_IMAGES,
+                    ]
+                
+                granted = all(check_permission(perm) for perm in permissions_to_check)
                 
                 if granted:
                     print("All permissions granted")
                     self.permissions_granted = True
                 else:
                     print("Some permissions missing")
-                    self.request_android_permissions()
+                    self.permissions_granted = False
                 
             except Exception as e:
                 print(f"Permission check error: {e}")
@@ -637,10 +653,6 @@ class MyApp(App):
         if not os.path.exists(self.save_dir):
             print(f"Creating directory: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
-            # Показываем сообщение, если папка пуста
-            if len(os.listdir(self.save_dir)) == 0:
-                self.show_info_popup("No sounds found", "The sounds folder is empty. Use the Upload button to add sound files.")
-            return
         
         self.layout.clear_widgets()
         self.buttons.clear()
@@ -660,7 +672,10 @@ class MyApp(App):
         
         # Если файлов не найдено, показываем информационное сообщение
         if not found_files:
-            self.show_info_popup("No sounds found", "No audio files found in the sounds folder. Use the Upload button to add MP3, WAV, or OGG files.")
+            self.show_info_popup("No sounds found", 
+                               "No audio files found.\n\n"
+                               "Use the Upload button to add MP3, WAV, or OGG files.\n\n"
+                               "If you see permission errors, make sure to grant storage permissions when asked.")
 
     def add_sound_button(self, path):
         # Проверяем, не добавлен ли уже этот звук
@@ -732,92 +747,85 @@ class MyApp(App):
             print(f"Error deleting sound: {e}")
             self.show_error_popup("Error deleting sound")
 
-    def open_filechooser(self, instance):
-        print("Opening file chooser...")
+    def open_file_picker(self, instance):
+        print("Opening file picker...")
         
-        # Проверяем разрешения на Android
-        if platform == 'android' and not self.permissions_granted:
-            self.show_error_popup("Storage permissions required to upload files. Please grant permissions and try again.")
-            self.request_android_permissions()
-            return
-        
-        content = BoxLayout(orientation='vertical', spacing=10)
-        
-        # На Android используем корневой путь, на других ОС - домашнюю директорию
         if platform == 'android':
-            try:
-                from android.storage import primary_external_storage_path
-                initial_path = primary_external_storage_path()
-            except:
-                initial_path = "/"
+            self.open_android_file_picker()
         else:
-            import platform as sys_platform
-            if sys_platform.system() == "Windows":
-                initial_path = "C:\\"
-            else:
-                initial_path = "/"
+            self.open_desktop_file_picker()
+
+    def open_android_file_picker(self):
+        """Используем системный файловый пикер на Android"""
+        try:
+            from jnius import autoclass, cast
+            from android import mActivity
             
-        filechooser = FileChooserListView(
-            filters=['*.mp3', '*.wav', '*.ogg'],
-            path=initial_path,
-            size_hint=(1, 0.8)
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            
+            # Создаем Intent для выбора файла
+            intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.setType("audio/*")
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            
+            # Запускаем активность
+            mActivity.startActivityForResult(intent, 123)
+            
+        except Exception as e:
+            print(f"Error opening Android file picker: {e}")
+            self.show_error_popup(f"Cannot open file picker: {str(e)}")
+
+    def open_desktop_file_picker(self):
+        """Используем стандартный файловый диалог для desktop"""
+        from tkinter import Tk, filedialog
+        import sys
+        
+        root = Tk()
+        root.withdraw()  # Скрываем основное окно
+        
+        file_path = filedialog.askopenfilename(
+            title="Select Audio File",
+            filetypes=[("Audio files", "*.mp3 *.wav *.ogg"), ("All files", "*.*")]
         )
-        content.add_widget(filechooser)
+        
+        root.destroy()
+        
+        if file_path:
+            self.process_selected_file(file_path)
 
-        btn_box = BoxLayout(size_hint_y=None, height=80, spacing=10)
-        select_btn = Button(text="Select")
-        cancel_btn = Button(text="Cancel")
-        btn_box.add_widget(select_btn)
-        btn_box.add_widget(cancel_btn)
-        content.add_widget(btn_box)
-
-        popup = Popup(
-            title="Select Audio File", 
-            content=content, 
-            size_hint=(0.9, 0.9),
-            auto_dismiss=False
-        )
-
-        def select_file(instance):
-            if filechooser.selection:
-                for path in filechooser.selection:
-                    try:
-                        print(f"Selected: {path}")
-                        filename = os.path.basename(path)
-                        
-                        # Проверяем расширение файла
-                        if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
-                            self.show_error_popup("Please select an audio file (MP3, WAV, or OGG)")
-                            continue
-                        
-                        new_path = os.path.join(self.save_dir, filename)
-                        
-                        # Если файл с таким именем уже существует, добавляем номер
-                        if os.path.exists(new_path):
-                            base, ext = os.path.splitext(filename)
-                            counter = 1
-                            while os.path.exists(new_path):
-                                new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
-                                counter += 1
-                        
-                        # Копируем файл
-                        shutil.copy2(path, new_path)
-                        print(f"Copied to: {new_path}")
-                        
-                        # Добавляем кнопку звука
-                        if self.add_sound_button(new_path):
-                            self.show_info_popup("Success", f"Sound '{filename}' added successfully!")
-                            
-                    except Exception as e:
-                        print(f"Copy error: {e}")
-                        self.show_error_popup(f"Upload error: {str(e)}")
-                popup.dismiss()
-            else:
-                self.show_error_popup("Please select a file first")
-
-        select_btn.bind(on_release=select_file)
-        cancel_btn.bind(on_release=lambda x: popup.dismiss())
-        popup.open()
+    def process_selected_file(self, file_path):
+        """Обрабатываем выбранный файл"""
+        try:
+            filename = os.path.basename(file_path)
+            
+            # Проверяем расширение файла
+            if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                self.show_error_popup("Please select an audio file (MP3, WAV, or OGG)")
+                return
+            
+            new_path = os.path.join(self.save_dir, filename)
+            
+            # Если файл с таким именем уже существует, добавляем номер
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(new_path):
+                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                    counter += 1
+            
+            # Копируем файл
+            shutil.copy2(file_path, new_path)
+            print(f"Copied to: {new_path}")
+            
+            # Добавляем кнопку звука
+            if self.add_sound_button(new_path):
+                self.show_info_popup("Success", f"Sound '{filename}' added successfully!")
+                
+        except Exception as e:
+            print(f"Error processing file: {e}")
+            self.show_error_popup(f"Upload error: {str(e)}")
 
     def open_settings(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
@@ -896,7 +904,11 @@ Debug Info:
 
     def show_error_popup(self, message):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text=message))
+        content.add_widget(Label(
+            text=message,
+            text_size=(Window.width * 0.8 - 20, None),
+            halign='center'
+        ))
         close_btn = Button(text="OK", size_hint_y=None, height=50)
         content.add_widget(close_btn)
         
