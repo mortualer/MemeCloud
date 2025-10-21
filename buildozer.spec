@@ -24,7 +24,7 @@ log_level = 2
 android.add_resource = android/res
 
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.sdk = 24
