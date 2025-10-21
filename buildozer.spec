@@ -21,10 +21,10 @@ android.adaptive_icon.monochrome = android/res/mipmap-anydpi-v26/ic_launcher_mon
 
 [buildozer]
 log_level = 2
-android.add_resource = android/res
+android.add_resource = saved_sounds, android/res
 
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES
 android.api = 33
 android.minapi = 21
 android.sdk = 24
