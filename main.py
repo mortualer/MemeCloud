@@ -390,13 +390,17 @@ class MyApp(App):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
+        # Упрощенная логика путей - всегда используем внутреннее хранилище
         if platform == 'android':
             try:
-                from android.storage import primary_external_storage_path, app_storage_path
-                self.save_dir = os.path.join(primary_external_storage_path(), "MemeCloud", "saved_sounds")
-            except Exception:
                 from android.storage import app_storage_path
-                self.save_dir = os.path.join(app_storage_path(), "saved_sounds")
+                base_dir = app_storage_path()
+                self.save_dir = os.path.join(base_dir, "saved_sounds")
+                print(f"Using app storage: {base_dir}")
+            except Exception as e:
+                print(f"Error getting app storage: {e}")
+                # Fallback для других платформ
+                self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
         else:
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
 
@@ -407,9 +411,11 @@ class MyApp(App):
         self.buttons = []
         self.pin_active = False
         self.sound_settings = {}
+        self.permissions_granted = False
         self.load_settings()
 
     def build(self):
+        # Запрашиваем разрешения сразу при запуске
         if platform == 'android':
             self.request_android_permissions()
         
@@ -477,7 +483,8 @@ class MyApp(App):
         self.scroll.add_widget(self.layout)
         self.root.add_widget(self.scroll)
 
-        self.load_existing_sounds()
+        # Загружаем существующие звуки после небольшой задержки
+        Clock.schedule_once(lambda dt: self.load_existing_sounds(), 1)
         
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
         
@@ -488,26 +495,9 @@ class MyApp(App):
 
     def on_start(self):
         print("App started")
+        # Проверяем разрешения через секунду после запуска
         if platform == 'android':
             Clock.schedule_once(self.check_android_permissions, 1)
-        
-        # Копируем встроенные mp3 при первом запуске
-        try:
-            app_root = os.path.dirname(os.path.abspath(__file__))
-            src_dir = os.path.join(app_root, "saved_sounds")
-            dst_dir = self.save_dir
-            if os.path.exists(src_dir):
-                for file in os.listdir(src_dir):
-                    if file.lower().endswith((".mp3", ".wav", ".ogg")):
-                        src = os.path.join(src_dir, file)
-                        dst = os.path.join(dst_dir, file)
-                        if not os.path.exists(dst):
-                            shutil.copy2(src, dst)
-                            print(f"Copied {file}")
-                # Перезагружаем звуки после копирования
-                Clock.schedule_once(lambda dt: self.load_existing_sounds(), 1)
-        except Exception as e:
-            print("Error copying default sounds:", e)
 
     def request_android_permissions(self):
         if platform == 'android':
@@ -515,12 +505,14 @@ class MyApp(App):
                 print("Requesting Android permissions...")
                 from android.permissions import request_permissions, Permission
                 
+                # Запрашиваем только необходимые разрешения
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.MANAGE_EXTERNAL_STORAGE,
-                    Permission.RECORD_AUDIO
                 ]
+                
+                # Для Android 10+ может потребоваться MANAGE_EXTERNAL_STORAGE
+                # но это ограничено политиками Google Play
                 
                 request_permissions(permissions, self.permission_callback)
                 print("Permissions requested")
@@ -529,19 +521,33 @@ class MyApp(App):
                 print(f"Permission request failed: {e}")
 
     def permission_callback(self, permissions, grant_results):
+        print(f"Permission callback: {permissions}, {grant_results}")
         if all(grant_results):
             print("All permissions granted")
+            self.permissions_granted = True
+            # Перезагружаем звуки после получения разрешений
+            Clock.schedule_once(lambda dt: self.load_existing_sounds(), 0.5)
         else:
             print("Some permissions were denied")
+            self.permissions_granted = False
             self.show_permission_denied_popup()
 
     def show_permission_denied_popup(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text='This app requires storage permissions to work properly.\nPlease grant permissions in app settings.'))
+        content.add_widget(Label(
+            text='This app requires storage permissions to work properly.\n\nWithout permissions, you can only use built-in sounds.',
+            text_size=(Window.width * 0.8 - 20, None),
+            halign='center'
+        ))
         ok_btn = Button(text='OK', size_hint_y=None, height=50)
         content.add_widget(ok_btn)
         
-        popup = Popup(title='Permissions Required', content=content, size_hint=(0.8, 0.4))
+        popup = Popup(
+            title='Permissions Required', 
+            content=content, 
+            size_hint=(0.8, 0.4),
+            auto_dismiss=False
+        )
         ok_btn.bind(on_release=popup.dismiss)
         popup.open()
 
@@ -553,8 +559,6 @@ class MyApp(App):
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE, 
                     Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.MANAGE_EXTERNAL_STORAGE,
-                    Permission.RECORD_AUDIO
                 ]
                 
                 granted = True
@@ -565,6 +569,7 @@ class MyApp(App):
                 
                 if granted:
                     print("All permissions granted")
+                    self.permissions_granted = True
                 else:
                     print("Some permissions missing")
                     self.request_android_permissions()
@@ -632,6 +637,9 @@ class MyApp(App):
         if not os.path.exists(self.save_dir):
             print(f"Creating directory: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
+            # Показываем сообщение, если папка пуста
+            if len(os.listdir(self.save_dir)) == 0:
+                self.show_info_popup("No sounds found", "The sounds folder is empty. Use the Upload button to add sound files.")
             return
         
         self.layout.clear_widgets()
@@ -639,15 +647,23 @@ class MyApp(App):
         
         print("Scanning for audio files...")
         audio_extensions = ('.mp3', '.wav', '.ogg')
+        found_files = False
+        
         for filename in sorted(os.listdir(self.save_dir)):
             if filename.lower().endswith(audio_extensions):
                 sound_path = os.path.join(self.save_dir, filename)
                 print(f"Found audio file: {filename}")
                 self.add_sound_button(sound_path)
+                found_files = True
         
         print(f"Total sounds loaded: {len(self.buttons)}")
+        
+        # Если файлов не найдено, показываем информационное сообщение
+        if not found_files:
+            self.show_info_popup("No sounds found", "No audio files found in the sounds folder. Use the Upload button to add MP3, WAV, or OGG files.")
 
     def add_sound_button(self, path):
+        # Проверяем, не добавлен ли уже этот звук
         for btn in self.buttons:
             if btn.sound_id in path:
                 return
@@ -658,9 +674,14 @@ class MyApp(App):
         
         print(f"Loading sound: {filename}")
         
-        icon_file = os.path.join(os.path.dirname(path), self.clean_sound_name(filename) + ".png")
-        if not os.path.exists(icon_file):
-            icon_file = os.path.join(os.path.dirname(path), os.path.splitext(filename)[0] + ".png")
+        # Пытаемся найти иконку
+        icon_file = None
+        icon_extensions = ['.png', '.jpg', '.jpeg']
+        for ext in icon_extensions:
+            potential_icon = os.path.join(self.save_dir, sound_id + ext)
+            if os.path.exists(potential_icon):
+                icon_file = potential_icon
+                break
         
         sound = SoundLoader.load(path)
         if sound:
@@ -672,9 +693,11 @@ class MyApp(App):
             
             self.layout.add_widget(btn_widget)
             self.buttons.append(btn_widget)
+            return True
         else:
             print(f"Failed to load sound: {filename}")
             self.show_error_popup(f"Failed to load sound: {filename}")
+            return False
 
     def delete_sound(self, sound_button):
         try:
@@ -687,8 +710,10 @@ class MyApp(App):
                     self.buttons.remove(btn)
                     
                     sound_id = btn.sound_id
+                    # Удаляем связанные файлы (звук и иконку)
                     for filename in os.listdir(self.save_dir):
-                        if filename.startswith(sound_id) or sound_id in filename:
+                        file_base = os.path.splitext(filename)[0]
+                        if file_base == sound_id:
                             file_path = os.path.join(self.save_dir, filename)
                             try:
                                 os.remove(file_path)
@@ -696,6 +721,7 @@ class MyApp(App):
                             except Exception as e:
                                 print(f"Error removing file: {e}")
                     
+                    # Удаляем настройки
                     if sound_id in self.sound_settings:
                         del self.sound_settings[sound_id]
                         self.save_sound_settings()
@@ -709,12 +735,27 @@ class MyApp(App):
     def open_filechooser(self, instance):
         print("Opening file chooser...")
         
+        # Проверяем разрешения на Android
+        if platform == 'android' and not self.permissions_granted:
+            self.show_error_popup("Storage permissions required to upload files. Please grant permissions and try again.")
+            self.request_android_permissions()
+            return
+        
         content = BoxLayout(orientation='vertical', spacing=10)
         
+        # На Android используем корневой путь, на других ОС - домашнюю директорию
         if platform == 'android':
-            initial_path = "/storage/emulated/0/"
+            try:
+                from android.storage import primary_external_storage_path
+                initial_path = primary_external_storage_path()
+            except:
+                initial_path = "/"
         else:
-            initial_path = "/"
+            import platform as sys_platform
+            if sys_platform.system() == "Windows":
+                initial_path = "C:\\"
+            else:
+                initial_path = "/"
             
         filechooser = FileChooserListView(
             filters=['*.mp3', '*.wav', '*.ogg'],
@@ -730,7 +771,12 @@ class MyApp(App):
         btn_box.add_widget(cancel_btn)
         content.add_widget(btn_box)
 
-        popup = Popup(title="Select Audio File", content=content, size_hint=(0.9, 0.9))
+        popup = Popup(
+            title="Select Audio File", 
+            content=content, 
+            size_hint=(0.9, 0.9),
+            auto_dismiss=False
+        )
 
         def select_file(instance):
             if filechooser.selection:
@@ -738,8 +784,15 @@ class MyApp(App):
                     try:
                         print(f"Selected: {path}")
                         filename = os.path.basename(path)
+                        
+                        # Проверяем расширение файла
+                        if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                            self.show_error_popup("Please select an audio file (MP3, WAV, or OGG)")
+                            continue
+                        
                         new_path = os.path.join(self.save_dir, filename)
                         
+                        # Если файл с таким именем уже существует, добавляем номер
                         if os.path.exists(new_path):
                             base, ext = os.path.splitext(filename)
                             counter = 1
@@ -747,17 +800,20 @@ class MyApp(App):
                                 new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                                 counter += 1
                         
+                        # Копируем файл
                         shutil.copy2(path, new_path)
                         print(f"Copied to: {new_path}")
                         
-                        self.add_sound_button(new_path)
+                        # Добавляем кнопку звука
+                        if self.add_sound_button(new_path):
+                            self.show_info_popup("Success", f"Sound '{filename}' added successfully!")
                             
                     except Exception as e:
                         print(f"Copy error: {e}")
-                        self.show_error_popup(f"Upload error: {e}")
+                        self.show_error_popup(f"Upload error: {str(e)}")
                 popup.dismiss()
             else:
-                print("No file selected")
+                self.show_error_popup("Please select a file first")
 
         select_btn.bind(on_release=select_file)
         cancel_btn.bind(on_release=lambda x: popup.dismiss())
@@ -766,18 +822,34 @@ class MyApp(App):
     def open_settings(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
+        # Информация о приложении и статусе разрешений
+        permissions_status = "Granted" if self.permissions_granted else "Not granted"
+        debug_info = f"""MemeCloud v{self.CURRENT_VERSION}
+
+Debug Info:
+• Sounds loaded: {len(self.buttons)}
+• Save dir: {self.save_dir}
+• Permissions: {permissions_status}
+• Platform: {platform}"""
+
         info_label = Label(
-            text=f"MemeCloud v{self.CURRENT_VERSION}\n\nDebug Info:\n• Sounds loaded: {len(self.buttons)}\n• Save dir: {self.save_dir}\n• Icons: {'Loaded' if os.path.exists('icon.png') else 'Missing'}",
+            text=debug_info,
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
-            halign='center',
+            halign='left',
             valign='top'
         )
         info_label.bind(size=info_label.setter('text_size'))
         content.add_widget(info_label)
         
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        
+        # Кнопка для принудительной проверки разрешений
+        if platform == 'android':
+            perm_btn = Button(text="Check Permissions", background_color=(0.4, 0.4, 0.6, 1))
+            perm_btn.bind(on_release=lambda x: self.check_android_permissions(0))
+            btn_layout.add_widget(perm_btn)
         
         github_btn = Button(text="GitHub", background_color=(0.3, 0.3, 0.5, 1))
         github_btn.bind(on_release=lambda x: webbrowser.open("https://github.com/mortualer/MemeCloud"))
@@ -788,7 +860,12 @@ class MyApp(App):
         btn_layout.add_widget(close_btn)
         content.add_widget(btn_layout)
 
-        popup = Popup(title="Settings & Info", content=content, size_hint=(0.8, 0.6))
+        popup = Popup(
+            title="Settings & Info", 
+            content=content, 
+            size_hint=(0.8, 0.6),
+            auto_dismiss=False
+        )
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
@@ -796,8 +873,10 @@ class MyApp(App):
         self.pin_active = not self.pin_active
         if self.pin_active:
             instance.background_color = (0.15, 0.25, 0.45, 1)
+            instance.text = "Pinned"
         else:
             instance.background_color = (0.3, 0.8, 0.3, 1)
+            instance.text = "Pin"
 
         for btn in self.buttons:
             if hasattr(btn, 'is_expanded') and btn.is_expanded:
@@ -821,7 +900,31 @@ class MyApp(App):
         close_btn = Button(text="OK", size_hint_y=None, height=50)
         content.add_widget(close_btn)
         
-        popup = Popup(title="Error", content=content, size_hint=(0.6, 0.3))
+        popup = Popup(
+            title="Error", 
+            content=content, 
+            size_hint=(0.6, 0.3),
+            auto_dismiss=False
+        )
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def show_info_popup(self, title, message):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(
+            text=message,
+            text_size=(Window.width * 0.8 - 20, None),
+            halign='center'
+        ))
+        close_btn = Button(text="OK", size_hint_y=None, height=50)
+        content.add_widget(close_btn)
+        
+        popup = Popup(
+            title=title, 
+            content=content, 
+            size_hint=(0.7, 0.4),
+            auto_dismiss=False
+        )
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
