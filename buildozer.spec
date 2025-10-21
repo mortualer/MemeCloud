@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3,wav,ogg
 source.include_dirs = saved_sounds
 version = 1.2.0
-requirements = python3,kivy,requests,openssl,android
+requirements = python3,kivy,requests,openssl,android,androidstorage4kivy
 orientation = portrait
 fullscreen = 0
 
