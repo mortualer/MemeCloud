@@ -498,6 +498,54 @@ class MyApp(App):
         # Проверяем разрешения через секунду после запуска
         if platform == 'android':
             Clock.schedule_once(self.check_android_permissions, 1)
+        
+        # Копируем встроенные звуки при первом запуске
+        self.copy_builtin_sounds()
+
+    def copy_builtin_sounds(self):
+        """Копирует встроенные звуки из assets в рабочую директорию"""
+        try:
+            # Пытаемся найти встроенные звуки в разных местах
+            possible_sources = [
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "saved_sounds"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "saved_sounds"),
+            ]
+            
+            source_dir = None
+            for source in possible_sources:
+                if os.path.exists(source) and os.path.isdir(source):
+                    source_dir = source
+                    break
+            
+            if not source_dir:
+                print("No built-in sounds directory found")
+                return
+                
+            print(f"Found built-in sounds at: {source_dir}")
+            
+            # Копируем только если файлов еще нет в целевой директории
+            copied_count = 0
+            for filename in os.listdir(source_dir):
+                if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                    src_path = os.path.join(source_dir, filename)
+                    dst_path = os.path.join(self.save_dir, filename)
+                    
+                    # Копируем только если файл еще не существует
+                    if not os.path.exists(dst_path):
+                        shutil.copy2(src_path, dst_path)
+                        copied_count += 1
+                        print(f"Copied built-in sound: {filename}")
+            
+            if copied_count > 0:
+                print(f"Copied {copied_count} built-in sounds")
+                # Перезагружаем звуки после копирования
+                Clock.schedule_once(lambda dt: self.load_existing_sounds(), 0.5)
+            else:
+                print("No new built-in sounds to copy")
+                
+        except Exception as e:
+            print(f"Error copying built-in sounds: {e}")
 
     def request_android_permissions(self):
         if platform == 'android':
@@ -505,21 +553,27 @@ class MyApp(App):
                 print("Requesting Android permissions...")
                 from android.permissions import request_permissions, Permission
                 
-                # Запрашиваем только необходимые разрешения для Android 10+
-                permissions = [
-                    Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                ]
+                # Запрашиваем разрешения для разных версий Android
+                permissions = []
                 
-                # Для Android 13+ нужны другие разрешения
+                # Для Android 13+ (API 33+)
                 if hasattr(Permission, 'READ_MEDIA_AUDIO'):
-                    permissions = [
+                    permissions.extend([
                         Permission.READ_MEDIA_AUDIO,
                         Permission.READ_MEDIA_IMAGES,
-                    ]
+                    ])
+                # Для Android 10-12
+                else:
+                    permissions.extend([
+                        Permission.READ_EXTERNAL_STORAGE,
+                        Permission.WRITE_EXTERNAL_STORAGE,
+                    ])
                 
+                # Всегда запрашиваем интернет
+                permissions.append(Permission.INTERNET)
+                
+                print(f"Requesting permissions: {permissions}")
                 request_permissions(permissions, self.permission_callback)
-                print("Permissions requested")
                 
             except Exception as e:
                 print(f"Permission request failed: {e}")
@@ -534,7 +588,10 @@ class MyApp(App):
         else:
             print("Some permissions were denied")
             self.permissions_granted = False
-            self.show_permission_denied_popup()
+            # Показываем popup только если это не INTERNET разрешение
+            storage_permissions = [p for p in permissions if 'STORAGE' in p or 'MEDIA' in p]
+            if storage_permissions:
+                self.show_permission_denied_popup()
 
     def show_permission_denied_popup(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
@@ -569,17 +626,20 @@ class MyApp(App):
                 from android.permissions import check_permission, Permission
                 
                 # Проверяем актуальные разрешения
-                permissions_to_check = [
-                    Permission.READ_EXTERNAL_STORAGE, 
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                ]
+                permissions_to_check = []
                 
                 # Для Android 13+
                 if hasattr(Permission, 'READ_MEDIA_AUDIO'):
-                    permissions_to_check = [
+                    permissions_to_check.extend([
                         Permission.READ_MEDIA_AUDIO,
                         Permission.READ_MEDIA_IMAGES,
-                    ]
+                    ])
+                # Для Android 10-12
+                else:
+                    permissions_to_check.extend([
+                        Permission.READ_EXTERNAL_STORAGE,
+                        Permission.WRITE_EXTERNAL_STORAGE,
+                    ])
                 
                 granted = all(check_permission(perm) for perm in permissions_to_check)
                 
@@ -763,12 +823,12 @@ class MyApp(App):
             
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
             
-            # Создаем Intent для выбора файла
+            # Создаем Intent для выбора файла с поддержкой множественного выбора
             intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.setType("audio/*")
             intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
             
             # Запускаем активность
             mActivity.startActivityForResult(intent, 123)
@@ -785,15 +845,16 @@ class MyApp(App):
         root = Tk()
         root.withdraw()  # Скрываем основное окно
         
-        file_path = filedialog.askopenfilename(
-            title="Select Audio File",
+        file_paths = filedialog.askopenfilenames(
+            title="Select Audio Files",
             filetypes=[("Audio files", "*.mp3 *.wav *.ogg"), ("All files", "*.*")]
         )
         
         root.destroy()
         
-        if file_path:
-            self.process_selected_file(file_path)
+        if file_paths:
+            for file_path in file_paths:
+                self.process_selected_file(file_path)
 
     def process_selected_file(self, file_path):
         """Обрабатываем выбранный файл"""
@@ -826,6 +887,102 @@ class MyApp(App):
         except Exception as e:
             print(f"Error processing file: {e}")
             self.show_error_popup(f"Upload error: {str(e)}")
+
+    def on_activity_result(self, request_code, result_code, intent):
+        """Обрабатываем результат выбора файлов на Android"""
+        if request_code != 123:
+            return
+            
+        try:
+            from jnius import autoclass, cast
+            
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            ClipData = autoclass('android.content.ClipData')
+            
+            if result_code == -1:  # RESULT_OK
+                clip_data = intent.getClipData()
+                
+                if clip_data is not None:
+                    # Множественный выбор
+                    count = clip_data.getItemCount()
+                    for i in range(count):
+                        uri = clip_data.getItemAt(i).getUri()
+                        self.process_android_uri(uri)
+                else:
+                    # Одиночный выбор
+                    uri = intent.getData()
+                    if uri is not None:
+                        self.process_android_uri(uri)
+                        
+        except Exception as e:
+            print(f"Error processing activity result: {e}")
+            self.show_error_popup(f"Error processing selected files: {str(e)}")
+
+    def process_android_uri(self, uri):
+        """Обрабатываем URI файла на Android"""
+        try:
+            from jnius import autoclass, cast
+            
+            Context = autoclass('android.content.Context')
+            File = autoclass('java.io.File')
+            DocumentsContract = autoclass('android.provider.DocumentsContract')
+            ContentResolver = autoclass('android.content.ContentResolver')
+            
+            # Получаем контекст
+            context = mActivity.getApplicationContext()
+            content_resolver = context.getContentResolver()
+            
+            # Получаем имя файла
+            cursor = content_resolver.query(uri, None, None, None, None)
+            if cursor and cursor.moveToFirst():
+                display_name_index = cursor.getColumnIndex("_display_name")
+                if display_name_index != -1:
+                    filename = cursor.getString(display_name_index)
+                else:
+                    filename = "audio_file"
+                cursor.close()
+            else:
+                filename = "audio_file"
+            
+            # Проверяем расширение файла
+            if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                print(f"Skipping non-audio file: {filename}")
+                return
+            
+            # Создаем путь для сохранения
+            new_path = os.path.join(self.save_dir, filename)
+            
+            # Если файл с таким именем уже существует, добавляем номер
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(new_path):
+                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                    counter += 1
+            
+            # Копируем содержимое файла
+            input_stream = content_resolver.openInputStream(uri)
+            with open(new_path, 'wb') as out_file:
+                # Читаем и записываем файл по частям
+                buffer_size = 8192
+                buffer = bytearray(buffer_size)
+                bytes_read = input_stream.read(buffer)
+                while bytes_read != -1:
+                    out_file.write(buffer[:bytes_read])
+                    bytes_read = input_stream.read(buffer)
+            
+            input_stream.close()
+            
+            print(f"Copied to: {new_path}")
+            
+            # Добавляем кнопку звука
+            if self.add_sound_button(new_path):
+                print(f"Sound '{filename}' added successfully!")
+                
+        except Exception as e:
+            print(f"Error processing Android URI: {e}")
+            self.show_error_popup(f"Error processing file: {str(e)}")
 
     def open_settings(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
@@ -1000,4 +1157,11 @@ Debug Info:
         popup.open()
 
 if __name__ == "__main__":
-    MyApp().run()
+    # Регистрируем обработчик результатов активности для Android
+    if platform == 'android':
+        from android import mActivity
+        app = MyApp()
+        mActivity.bind(on_activity_result=app.on_activity_result)
+        app.run()
+    else:
+        MyApp().run()
