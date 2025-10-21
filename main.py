@@ -78,7 +78,7 @@ class SoundButton(BoxLayout):
         self.add_widget(self.button)
 
         self.bind(pos=self.update_rect, size=self.update_rect)
-        self._long_press_trigger = Clock.create_trigger(self.expand, 0.5)
+        self._long_press_trigger = Clock.create_trigger(self.expand, 0.8)
 
     def update_rect(self, *args):
         self.rect.pos = self.pos
@@ -103,8 +103,9 @@ class SoundButton(BoxLayout):
 
     def start_highlight(self):
         self.stop_highlight()
-        anim = Animation(rgba=(0.5, 0.5, 0.7, 1), duration=0.2) + \
-               Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2)
+        # Более плавная анимация подсветки
+        anim = Animation(rgba=(0.4, 0.4, 0.6, 1), duration=0.3) + \
+               Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.4)
         anim.repeat = True
         anim.start(self.bg_color)
         self.highlight_anim = anim
@@ -113,7 +114,8 @@ class SoundButton(BoxLayout):
         if self.highlight_anim:
             self.highlight_anim.cancel(self.bg_color)
             self.highlight_anim = None
-        self.bg_color.rgba = (0.25, 0.25, 0.35, 1)
+        # Плавное возвращение к исходному цвету
+        Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2).start(self.bg_color)
 
     def check_sound(self, dt):
         if self.sound and self.sound.state != 'play':
@@ -132,11 +134,16 @@ class SoundButton(BoxLayout):
 
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
+            # Визуальный feedback при начале long press
+            Animation(background_color=(0.3, 0.3, 0.5, 0.3), duration=0.1).start(self.button)
             self._long_press_trigger()
         return False
 
     def end_long_press(self, instance, touch):
-        self._long_press_trigger.cancel()
+        if self._long_press_trigger.is_triggered:
+            self._long_press_trigger.cancel()
+            # Возвращаем цвет кнопки
+            Animation(background_color=(0, 0, 0, 0), duration=0.2).start(self.button)
         return False
 
     def expand(self, *args):
@@ -158,78 +165,127 @@ class SoundButton(BoxLayout):
         # Создаем расширенное представление
         self.create_expanded_view()
         
-        # Воспроизводим звук при расширении
-        self.play_sound()
-        
         # Рассчитываем высоту для расширенного состояния (под верхней панелью)
         top_bar_height = 75  # Высота верхней панели
         expanded_height = Window.height - top_bar_height - 20  # -20 для отступов
         
-        # Анимация расширения
-        anim = Animation(height=expanded_height, 
-                        duration=0.3, 
-                        t='out_quad')
+        # Плавная анимация расширения
+        anim = Animation(
+            height=expanded_height, 
+            duration=0.5, 
+            t='out_quad'
+        )
+        anim.bind(on_complete=self.on_expand_complete)
         anim.start(self)
+
+    def on_expand_complete(self, *args):
+        """Вызывается после завершения анимации расширения"""
+        # Воспроизводим звук после завершения анимации
+        self.play_sound()
 
     def create_expanded_view(self):
         self.clear_widgets()
         
-        expanded_layout = BoxLayout(orientation='vertical', spacing=15, padding=25)
+        expanded_layout = BoxLayout(orientation='vertical', spacing=20, padding=30)
         
         # Заголовок с возможностью проигрывания по клику
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
-            height=120,
-            font_size='24sp',
+            height=150,
+            font_size='28sp',
             bold=True,
             color=(1, 1, 1, 1)
         )
         title_label.bind(on_touch_down=self.on_title_touch)
         expanded_layout.add_widget(title_label)
         
+        # Контейнер для кнопок управления
+        controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=250)
+        
         # Кнопка проигрывания
         play_btn = Button(
             text='PLAY SOUND',
             size_hint_y=None,
-            height=80,
-            background_color=(0.3, 0.7, 0.3, 1),
+            height=100,
+            background_color=(0.2, 0.7, 0.3, 1),
+            background_normal='',
             color=(1, 1, 1, 1),
-            font_size='20sp'
+            font_size='22sp',
+            bold=True
         )
-        play_btn.bind(on_press=self.play_sound)
-        expanded_layout.add_widget(play_btn)
+        play_btn.bind(on_press=self.on_play_button_press)
+        play_btn.bind(on_release=self.on_play_button_release)
+        controls_layout.add_widget(play_btn)
         
-        btn_layout = BoxLayout(size_hint_y=None, height=120, spacing=15)
+        # Кнопки управления
+        btn_layout = BoxLayout(size_hint_y=None, height=100, spacing=15)
         
         delete_btn = Button(
             text='DELETE',
             size_hint_x=0.6,
             background_color=(0.8, 0.3, 0.3, 1),
+            background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
         )
-        delete_btn.bind(on_press=self.delete_sound)
+        delete_btn.bind(on_press=self.on_delete_button_press)
+        delete_btn.bind(on_release=self.on_delete_button_release)
         btn_layout.add_widget(delete_btn)
         
         close_btn = Button(
             text='CLOSE',
             size_hint_x=0.4,
             background_color=(0.5, 0.5, 0.7, 1),
+            background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
         )
-        close_btn.bind(on_press=lambda x: self.collapse())
+        close_btn.bind(on_press=self.on_close_button_press)
+        close_btn.bind(on_release=self.on_close_button_release)
         btn_layout.add_widget(close_btn)
         
-        expanded_layout.add_widget(btn_layout)
+        controls_layout.add_widget(btn_layout)
+        expanded_layout.add_widget(controls_layout)
         self.add_widget(expanded_layout)
+
+    def on_play_button_press(self, instance):
+        """Анимация при нажатии кнопки play"""
+        Animation(background_color=(0.3, 0.8, 0.4, 1), duration=0.1).start(instance)
+
+    def on_play_button_release(self, instance):
+        """Анимация при отпускании кнопки play"""
+        Animation(background_color=(0.2, 0.7, 0.3, 1), duration=0.3).start(instance)
+        self.play_sound()
+
+    def on_delete_button_press(self, instance):
+        """Анимация при нажатии кнопки delete"""
+        Animation(background_color=(0.9, 0.4, 0.4, 1), duration=0.1).start(instance)
+
+    def on_delete_button_release(self, instance):
+        """Анимация при отпускании кнопки delete"""
+        Animation(background_color=(0.8, 0.3, 0.3, 1), duration=0.3).start(instance)
+        self.delete_sound(instance)
+
+    def on_close_button_press(self, instance):
+        """Анимация при нажатии кнопки close"""
+        Animation(background_color=(0.6, 0.6, 0.8, 1), duration=0.1).start(instance)
+
+    def on_close_button_release(self, instance):
+        """Анимация при отпускании кнопки close"""
+        Animation(background_color=(0.5, 0.5, 0.7, 1), duration=0.3).start(instance)
+        self.collapse()
 
     def on_title_touch(self, instance, touch):
         """Обработка клика по заголовку для проигрывания звука"""
-        if self.is_expanded and instance.collide_point(*touch.pos) and touch.is_double_tap:
-            self.play_sound()
-            return True
+        if self.is_expanded and instance.collide_point(*touch.pos):
+            if touch.is_double_tap:
+                # Анимация при двойном клике
+                anim = Animation(color=(0.8, 0.8, 1, 1), duration=0.1)
+                anim += Animation(color=(1, 1, 1, 1), duration=0.3)
+                anim.start(instance)
+                self.play_sound()
+                return True
         return False
 
     def on_volume_change(self, instance, value):
@@ -245,20 +301,52 @@ class SoundButton(BoxLayout):
                 self.app.delete_sound(self)
             popup.dismiss()
         
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text=f'Delete "{self.btn_text}"?'))
+        content = BoxLayout(orientation='vertical', spacing=15, padding=20)
         
-        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        yes_btn = Button(text='Yes', background_color=(0.8, 0.3, 0.3, 1))
-        no_btn = Button(text='No')
+        # Анимированный заголовок
+        question_label = Label(
+            text=f'Delete "{self.btn_text}"?',
+            font_size='20sp',
+            color=(1, 1, 1, 1),
+            size_hint_y=None,
+            height=60
+        )
+        content.add_widget(question_label)
+        
+        btn_layout = BoxLayout(size_hint_y=None, height=60, spacing=15)
+        
+        yes_btn = Button(
+            text='YES', 
+            background_color=(0.8, 0.3, 0.3, 1),
+            background_normal='',
+            color=(1, 1, 1, 1)
+        )
+        no_btn = Button(
+            text='NO',
+            background_color=(0.4, 0.4, 0.6, 1),
+            background_normal='',
+            color=(1, 1, 1, 1)
+        )
+        
         btn_layout.add_widget(yes_btn)
         btn_layout.add_widget(no_btn)
         content.add_widget(btn_layout)
         
-        popup = Popup(title='Confirm Delete', content=content, size_hint=(0.7, 0.4))
+        popup = Popup(
+            title='Confirm Delete',
+            content=content, 
+            size_hint=(0.7, 0.4),
+            background='',
+            separator_color=(0.3, 0.3, 0.4, 1)
+        )
+        
+        # Анимация появления popup
+        popup.content.opacity = 0
+        popup.open()
+        Animation(opacity=1, duration=0.3).start(popup.content)
+        
         yes_btn.bind(on_release=confirm_delete)
         no_btn.bind(on_release=popup.dismiss)
-        popup.open()
 
     def collapse(self):
         if not self.is_expanded:
@@ -268,10 +356,12 @@ class SoundButton(BoxLayout):
         
         self.stop_sound_and_collapse()
         
-        # Анимация возврата к исходной высоте
-        anim = Animation(height=150, 
-                        duration=0.3, 
-                        t='out_quad')
+        # Плавная анимация сворачивания
+        anim = Animation(
+            height=150, 
+            duration=0.4, 
+            t='out_quad'
+        )
         anim.bind(on_complete=self.on_collapse_complete)
         anim.start(self)
 
@@ -326,26 +416,56 @@ class MyApp(App):
         Window.clearcolor = (0.95, 0.95, 0.98, 1)
         self.root = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
+        # Анимация появления верхней панели
+        self.root.opacity = 0
+        
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
-        self.search_input = TextInput(size_hint=(1, 1), hint_text="Search...", multiline=False,
-                                      background_color=(0.9, 0.9, 0.95, 1), foreground_color=(0, 0, 0, 1))
+        self.search_input = TextInput(
+            size_hint=(1, 1), 
+            hint_text="Search...", 
+            multiline=False,
+            background_color=(0.9, 0.9, 0.95, 1), 
+            foreground_color=(0, 0, 0, 1),
+            hint_text_color=(0.5, 0.5, 0.5, 0.7),
+            padding=[15, 10]
+        )
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
-        self.pin_button = Button(text="Pin", size_hint=(None, 1), width=100,
-                                 background_color=(0.3, 0.8, 0.3, 1), color=(1, 1, 1, 1))
+        self.pin_button = Button(
+            text="Pin", 
+            size_hint=(None, 1), 
+            width=100,
+            background_color=(0.3, 0.8, 0.3, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='14sp'
+        )
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        self.upload_button = Button(text="Upload", size_hint=(None, 1), width=175,
-                                    background_color=(0.5, 0.8, 0.5, 1), color=(1, 1, 1, 1))
+        self.upload_button = Button(
+            text="Upload", 
+            size_hint=(None, 1), 
+            width=175,
+            background_color=(0.5, 0.8, 0.5, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='14sp'
+        )
         self.upload_button.bind(on_release=self.open_filechooser)
         top_bar.add_widget(self.upload_button)
 
-        self.settings_button = Button(text="i", size_hint=(None, 1), width=100,
-                                     background_color=(0.4, 0.4, 0.6, 1), color=(1, 1, 1, 1),
-                                     font_size='14sp')
+        self.settings_button = Button(
+            text="i", 
+            size_hint=(None, 1), 
+            width=100,
+            background_color=(0.4, 0.4, 0.6, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='14sp'
+        )
         self.settings_button.bind(on_release=self.open_settings)
         top_bar.add_widget(self.settings_button)
 
@@ -360,6 +480,10 @@ class MyApp(App):
         self.load_existing_sounds()
         
         Clock.schedule_once(lambda dt: self.check_for_update(), 3)
+        
+        # Анимация появления интерфейса
+        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.8).start(self.root), 0.1)
+        
         return self.root
 
     def on_start(self):
@@ -761,4 +885,4 @@ class MyApp(App):
         popup.open()
 
 if __name__ == "__main__":
-    MyApp().run
+    MyApp().run()
