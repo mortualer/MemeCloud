@@ -1,10 +1,5 @@
 {
   "version": "1.2.0",
-  "download_url": "https://github.com/mortualer/MemeCloud/releases/download/v1.2.0/memecloud-1.2.0-arm64-v8a-debug.apk",
-  "changelog": "🎵 Auto-play sound on expand\n🗑️ Removed volume slider from expanded view\n🎨 Improved adaptive icons\n🔧 Better permission handling\n🐛 Fixed sound looping issue",
-  "release_notes": "## What's New in MemeCloud 1.2.0\n\n### New Features:\n- **Auto-play on expand**: Sounds automatically play when you expand buttons\n- **Cleaner expanded view**: Removed volume slider for simpler interface\n- **Adaptive icons**: Better looking icons on modern Android devices\n\n### Improvements:\n- Fixed sound looping issue\n- Better permission requests\n- Improved performance\n\n### Bug Fixes:\n- Sound playback stability\n- File management improvements",
-  "min_required_version": "1.0.0",
-  "release_date": "2025-10-18",
-  "file_size": "15872940",
-  "supported_architectures": ["arm64-v8a"]
+  "download_url": "https://github.com/mortualer/MemeCloud/releases/tag/v1.2.0",
+  "changelog": "Improved sound loading and performance, enhanced user interface, better file picker for Android, new button designs and animations, fixed bugs and stability improvements"
 }
