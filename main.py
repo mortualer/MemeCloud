@@ -21,7 +21,6 @@ from kivy.utils import platform
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
     from android.storage import app_storage_path
-    from android import mActivity
     from jnius import autoclass, cast
 
 # -------------------------
@@ -435,11 +434,6 @@ class MyApp(App):
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
-            # Регистрируем обработчик активности для Android
-            if platform == 'android':
-                from android import mActivity
-                mActivity.bind(on_activity_result=self.on_activity_result)
-            
             return self.root
             
         except Exception as e:
@@ -647,13 +641,12 @@ class MyApp(App):
         """Обрабатывает URI файла на Android"""
         try:
             from jnius import autoclass
-            from android import mActivity
             
             Context = autoclass('android.content.Context')
             ContentResolver = autoclass('android.content.ContentResolver')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            context = PythonActivity.mActivity
             
-            # Получаем контекст
-            context = mActivity.getApplicationContext()
             content_resolver = context.getContentResolver()
             
             # Получаем имя файла
@@ -961,10 +954,12 @@ class MyApp(App):
         """Открывает файловый пикер на Android"""
         try:
             from jnius import autoclass
-            from android import mActivity
+            from android import activity
             
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            context = PythonActivity.mActivity
             
             # Создаем Intent для выбора файла с поддержкой множественного выбора
             intent = Intent(Intent.ACTION_GET_CONTENT)
@@ -972,8 +967,16 @@ class MyApp(App):
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
             
+            # Регистрируем обработчик результата
+            def on_activity_result(request_code, result_code, intent):
+                if request_code == 123:
+                    self.on_activity_result(request_code, result_code, intent)
+            
+            # Устанавливаем обработчик
+            activity.bind(on_activity_result=on_activity_result)
+            
             # Запускаем активность
-            mActivity.startActivityForResult(intent, 123)
+            context.startActivityForResult(intent, 123)
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
