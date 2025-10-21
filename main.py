@@ -46,6 +46,7 @@ class SoundButton(BoxLayout):
         self.original_icon_path = icon_path
         self.highlight_anim = None
         self.sound_check_event = None
+        self.expanded_view = None  # Ссылка на расширенное представление
 
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
@@ -186,7 +187,8 @@ class SoundButton(BoxLayout):
     def create_expanded_view(self):
         self.clear_widgets()
         
-        expanded_layout = BoxLayout(orientation='vertical', spacing=20, padding=30)
+        # Основной контейнер расширенного вида
+        self.expanded_view = BoxLayout(orientation='vertical', spacing=20, padding=30)
         
         # Заголовок с возможностью проигрывания по клику
         title_label = Label(
@@ -198,7 +200,7 @@ class SoundButton(BoxLayout):
             color=(1, 1, 1, 1)
         )
         title_label.bind(on_touch_down=self.on_title_touch)
-        expanded_layout.add_widget(title_label)
+        self.expanded_view.add_widget(title_label)
         
         # Контейнер для кнопок управления
         controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=250)
@@ -208,7 +210,7 @@ class SoundButton(BoxLayout):
             text='PLAY SOUND',
             size_hint_y=None,
             height=100,
-            background_color=(0.2, 0.7, 0.3, 1),
+            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='22sp',
@@ -224,7 +226,7 @@ class SoundButton(BoxLayout):
         delete_btn = Button(
             text='DELETE',
             size_hint_x=0.6,
-            background_color=(0.8, 0.3, 0.3, 1),
+            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -236,7 +238,7 @@ class SoundButton(BoxLayout):
         close_btn = Button(
             text='CLOSE',
             size_hint_x=0.4,
-            background_color=(0.5, 0.5, 0.7, 1),
+            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -246,34 +248,34 @@ class SoundButton(BoxLayout):
         btn_layout.add_widget(close_btn)
         
         controls_layout.add_widget(btn_layout)
-        expanded_layout.add_widget(controls_layout)
-        self.add_widget(expanded_layout)
+        self.expanded_view.add_widget(controls_layout)
+        self.add_widget(self.expanded_view)
 
     def on_play_button_press(self, instance):
         """Анимация при нажатии кнопки play"""
-        Animation(background_color=(0.3, 0.8, 0.4, 1), duration=0.1).start(instance)
+        Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_play_button_release(self, instance):
         """Анимация при отпускании кнопки play"""
-        Animation(background_color=(0.2, 0.7, 0.3, 1), duration=0.3).start(instance)
+        Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.play_sound()
 
     def on_delete_button_press(self, instance):
         """Анимация при нажатии кнопки delete"""
-        Animation(background_color=(0.9, 0.4, 0.4, 1), duration=0.1).start(instance)
+        Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_delete_button_release(self, instance):
         """Анимация при отпускании кнопки delete"""
-        Animation(background_color=(0.8, 0.3, 0.3, 1), duration=0.3).start(instance)
+        Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.delete_sound(instance)
 
     def on_close_button_press(self, instance):
         """Анимация при нажатии кнопки close"""
-        Animation(background_color=(0.6, 0.6, 0.8, 1), duration=0.1).start(instance)
+        Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_close_button_release(self, instance):
         """Анимация при отпускании кнопки close"""
-        Animation(background_color=(0.5, 0.5, 0.7, 1), duration=0.3).start(instance)
+        Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.collapse()
 
     def on_title_touch(self, instance, touch):
@@ -354,6 +356,16 @@ class SoundButton(BoxLayout):
         
         self.is_expanded = False
         
+        # Сначала анимируем исчезновение внутреннего содержимого
+        if self.expanded_view:
+            anim_opacity = Animation(opacity=0, duration=0.2)
+            anim_opacity.bind(on_complete=self._start_collapse_animation)
+            anim_opacity.start(self.expanded_view)
+        else:
+            self._start_collapse_animation()
+
+    def _start_collapse_animation(self, *args):
+        """Начинает анимацию сворачивания после исчезновения содержимого"""
         self.stop_sound_and_collapse()
         
         # Плавная анимация сворачивания
@@ -374,6 +386,9 @@ class SoundButton(BoxLayout):
         self.clear_widgets()
         for widget in self.original_widgets:
             self.add_widget(widget)
+        # Сбрасываем прозрачность на случай следующего расширения
+        self.opacity = 1
+        self.expanded_view = None
 
     def stop_sound_and_collapse(self):
         if self.sound:
@@ -473,11 +488,12 @@ class MyApp(App):
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
+        # Кнопка Pin - пурпурного цвета как у звуковых кнопок
         self.pin_button = Button(
             text="Pin", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.3, 0.8, 0.3, 1),
+            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -485,11 +501,12 @@ class MyApp(App):
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
+        # Кнопка Upload - пурпурного цвета
         self.upload_button = Button(
             text="Upload", 
             size_hint=(None, 1), 
             width=175,
-            background_color=(0.5, 0.8, 0.5, 1),
+            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -497,11 +514,12 @@ class MyApp(App):
         self.upload_button.bind(on_release=self.show_upload_options)
         top_bar.add_widget(self.upload_button)
 
+        # Кнопка Info - пурпурного цвета
         self.settings_button = Button(
             text="i", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.4, 0.4, 0.6, 1),
+            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -613,9 +631,11 @@ class MyApp(App):
         if all(grant_results):
             print("All permissions granted")
             self.permissions_granted = True
+            self.show_info_popup("Success", "All permissions granted")
         else:
             print("Some permissions denied")
             self.permissions_granted = False
+            self.show_info_popup("Warning", "Some permissions were denied")
 
     def on_activity_result(self, request_code, result_code, intent):
         """Обрабатывает результат выбора файлов на Android"""
@@ -931,17 +951,6 @@ class MyApp(App):
             background_color=(0.3, 0.6, 0.9, 1)
         )
         
-        # На Android показываем только кнопку выбора файлов
-        if platform != 'android':
-            folder_btn = Button(
-                text="Select Folder",
-                size_hint_y=None,
-                height=60,
-                background_color=(0.4, 0.7, 0.4, 1)
-            )
-            folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
-            btn_layout.add_widget(folder_btn)
-        
         btn_layout.add_widget(file_btn)
         content.add_widget(btn_layout)
         
@@ -970,25 +979,12 @@ class MyApp(App):
         popup.dismiss()
         self.open_file_picker()
 
-    def _folder_picker_selected(self, popup):
-        """Обработчик выбора папки"""
-        popup.dismiss()
-        self.open_folder_picker()
-
     def open_file_picker(self):
         """Открывает выбор файлов"""
         if platform == 'android':
             self.open_android_file_picker()
         else:
             self.open_desktop_file_picker()
-
-    def open_folder_picker(self):
-        """Открывает выбор папки"""
-        if platform == 'android':
-            # На Android используем множественный выбор файлов вместо папки
-            self.show_info_popup("Info", "On Android, please use 'Select Audio Files' for multiple file selection")
-        else:
-            self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
         """Открывает файловый пикер на Android"""
@@ -1053,25 +1049,6 @@ class MyApp(App):
             print(f"Error in file picker: {e}")
             self.show_error_popup(f"Error selecting files: {str(e)}")
 
-    def open_desktop_folder_picker(self):
-        """Выбор папки для desktop"""
-        try:
-            from tkinter import Tk, filedialog
-            
-            root = Tk()
-            root.withdraw()
-            
-            folder_path = filedialog.askdirectory(title="Select Folder with Audio Files")
-            
-            root.destroy()
-            
-            if folder_path:
-                self.copy_audio_from_folder(folder_path)
-                
-        except Exception as e:
-            print(f"Error in folder picker: {e}")
-            self.show_error_popup(f"Error selecting folder: {str(e)}")
-
     def copy_audio_file(self, file_path):
         """Копирует аудио файл"""
         try:
@@ -1100,34 +1077,6 @@ class MyApp(App):
             print(f"Error copying file: {e}")
             return False
 
-    def copy_audio_from_folder(self, folder_path):
-        """Копирует все аудио файлы из папки"""
-        try:
-            audio_files = []
-            for filename in os.listdir(folder_path):
-                if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
-                    audio_files.append(filename)
-            
-            if not audio_files:
-                self.show_info_popup("No Audio Files", "No audio files found in selected folder")
-                return
-            
-            copied_count = 0
-            for filename in audio_files:
-                src_path = os.path.join(folder_path, filename)
-                if self.copy_audio_file(src_path):
-                    copied_count += 1
-            
-            if copied_count > 0:
-                self.show_info_popup("Complete", f"Added {copied_count} audio files")
-                Clock.schedule_once(self.delayed_load_sounds, 0.5)
-            else:
-                self.show_info_popup("Error", "No files were added")
-            
-        except Exception as e:
-            print(f"Error copying from folder: {e}")
-            self.show_error_popup(f"Error copying files: {str(e)}")
-
     def open_settings(self, instance):
         """Открывает настройки"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
@@ -1155,14 +1104,25 @@ Debug Info:
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
         
         if platform == 'android':
-            perm_btn = Button(text="Request Permissions", background_color=(0.4, 0.4, 0.6, 1))
+            # Кнопка Permissions с уменьшенным шрифтом
+            perm_btn = Button(
+                text="Permissions", 
+                background_color=(0.4, 0.4, 0.6, 1),
+                font_size='12sp'  # Уменьшаем шрифт чтобы поместилось
+            )
             perm_btn.bind(on_release=lambda x: self.request_android_permissions())
             btn_layout.add_widget(perm_btn)
         
-        github_btn = Button(text="GitHub", background_color=(0.3, 0.3, 0.5, 1))
+        github_btn = Button(
+            text="GitHub", 
+            background_color=(0.3, 0.3, 0.5, 1)
+        )
         github_btn.bind(on_release=lambda x: webbrowser.open("https://github.com/mortualer/MemeCloud"))
         
-        close_btn = Button(text="Close", background_color=(0.5, 0.5, 0.7, 1))
+        close_btn = Button(
+            text="Close", 
+            background_color=(0.5, 0.5, 0.7, 1)
+        )
         
         btn_layout.add_widget(github_btn)
         btn_layout.add_widget(close_btn)
@@ -1181,10 +1141,10 @@ Debug Info:
         """Переключает режим закрепления"""
         self.pin_active = not self.pin_active
         if self.pin_active:
-            instance.background_color = (0.15, 0.25, 0.45, 1)
-            instance.text = "Pinned"
+            instance.background_color = (0.15, 0.15, 0.25, 1)  # Темнее при активности
+            instance.text = "Pin"  # Оставляем текст "Pin" всегда
         else:
-            instance.background_color = (0.3, 0.8, 0.3, 1)
+            instance.background_color = (0.25, 0.25, 0.35, 1)  # Обычный цвет
             instance.text = "Pin"
 
         for btn in self.buttons:
