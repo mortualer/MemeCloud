@@ -608,6 +608,8 @@ class MyApp(App):
 
     def on_activity_result(self, request_code, result_code, intent):
         """Обрабатывает результат выбора файлов на Android"""
+        print(f"Activity result: request_code={request_code}, result_code={result_code}")
+        
         if request_code != 123:
             return
             
@@ -624,15 +626,21 @@ class MyApp(App):
                 if clip_data is not None:
                     # Множественный выбор
                     count = clip_data.getItemCount()
+                    print(f"Multiple files selected: {count}")
                     for i in range(count):
                         uri = clip_data.getItemAt(i).getUri()
+                        print(f"Processing URI {i+1}: {uri}")
                         self.process_android_uri(uri)
                 else:
                     # Одиночный выбор
                     uri = intent.getData()
                     if uri is not None:
+                        print(f"Single file selected: {uri}")
                         self.process_android_uri(uri)
-                        
+                print("File processing completed")
+            else:
+                print("User cancelled file selection")
+                
         except Exception as e:
             print(f"Error processing activity result: {e}")
             self.show_error_popup(f"Error processing selected files: {str(e)}")
@@ -651,20 +659,21 @@ class MyApp(App):
             
             # Получаем имя файла
             cursor = content_resolver.query(uri, None, None, None, None)
-            if cursor and cursor.moveToFirst():
-                display_name_index = cursor.getColumnIndex("_display_name")
-                if display_name_index != -1:
-                    filename = cursor.getString(display_name_index)
-                else:
-                    filename = "audio_file"
-                cursor.close()
-            else:
-                filename = "audio_file"
+            filename = "audio_file"
+            if cursor:
+                try:
+                    display_name_index = cursor.getColumnIndex("_display_name")
+                    if display_name_index != -1 and cursor.moveToFirst():
+                        filename = cursor.getString(display_name_index)
+                finally:
+                    cursor.close()
             
             # Проверяем расширение файла
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                 print(f"Skipping non-audio file: {filename}")
                 return
+            
+            print(f"Processing audio file: {filename}")
             
             # Создаем путь для сохранения
             new_path = os.path.join(self.save_dir, filename)
@@ -690,15 +699,21 @@ class MyApp(App):
             
             input_stream.close()
             
-            print(f"Copied to: {new_path}")
+            print(f"Successfully copied to: {new_path}")
             
             # Добавляем кнопку звука
-            if self.add_sound_button(new_path):
-                self.show_info_popup("Success", f"Sound '{filename}' added successfully!")
+            Clock.schedule_once(lambda dt: self.add_sound_button_and_refresh(new_path), 0.1)
                 
         except Exception as e:
             print(f"Error processing Android URI: {e}")
             self.show_error_popup(f"Error processing file: {str(e)}")
+
+    def add_sound_button_and_refresh(self, path):
+        """Добавляет кнопку звука и обновляет интерфейс"""
+        if self.add_sound_button(path):
+            self.show_info_popup("Success", f"Sound added successfully!")
+            # Обновляем список звуков
+            Clock.schedule_once(self.delayed_load_sounds, 0.2)
 
     def load_settings(self):
         """Загружает настройки приложения"""
@@ -798,13 +813,15 @@ class MyApp(App):
         """Добавляет кнопку звука"""
         try:
             # Проверяем, не добавлен ли уже этот звук
-            for btn in self.buttons:
-                if btn.sound_id in path:
-                    return
-            
             filename = os.path.basename(path)
-            btn_text = self.clean_sound_name(filename)
             sound_id = os.path.splitext(filename)[0]
+            
+            for btn in self.buttons:
+                if btn.sound_id == sound_id:
+                    print(f"Sound already exists: {filename}")
+                    return False
+            
+            btn_text = self.clean_sound_name(filename)
             
             print(f"Loading sound: {filename}")
             
@@ -946,7 +963,7 @@ class MyApp(App):
     def open_folder_picker(self):
         """Открывает выбор папки"""
         if platform == 'android':
-            self.show_error_popup("Folder selection not available on Android yet")
+            self.open_android_folder_picker()
         else:
             self.open_desktop_folder_picker()
 
@@ -969,6 +986,7 @@ class MyApp(App):
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
+                print(f"File picker result: {request_code}, {result_code}")
                 if request_code == 123:
                     self.on_activity_result(request_code, result_code, intent)
             
@@ -977,10 +995,97 @@ class MyApp(App):
             
             # Запускаем активность
             context.startActivityForResult(intent, 123)
+            print("Android file picker started")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
             self.show_error_popup(f"Cannot open file picker: {str(e)}")
+
+    def open_android_folder_picker(self):
+        """Открывает выбор папки на Android"""
+        try:
+            from jnius import autoclass
+            from android import activity
+            
+            Intent = autoclass('android.content.Intent')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            context = PythonActivity.mActivity
+            
+            # Используем ACTION_OPEN_DOCUMENT_TREE для выбора папки (доступно с API 21)
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            
+            # Регистрируем обработчик результата
+            def on_activity_result(request_code, result_code, intent):
+                print(f"Folder picker result: {request_code}, {result_code}")
+                if request_code == 124:
+                    if result_code == -1:  # RESULT_OK
+                        uri = intent.getData()
+                        if uri:
+                            self.process_android_folder(uri)
+                    # Убираем обработчик
+                    activity.unbind(on_activity_result=on_activity_result)
+            
+            # Устанавливаем обработчик
+            activity.bind(on_activity_result=on_activity_result)
+            
+            # Запускаем активность
+            context.startActivityForResult(intent, 124)
+            print("Android folder picker started")
+            
+        except Exception as e:
+            print(f"Error opening Android folder picker: {e}")
+            self.show_error_popup(f"Cannot open folder picker: {str(e)}")
+
+    def process_android_folder(self, folder_uri):
+        """Обрабатывает выбранную папку на Android"""
+        try:
+            from jnius import autoclass
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            DocumentsContract = autoclass('android.provider.DocumentsContract')
+            ContentResolver = autoclass('android.content.ContentResolver')
+            context = PythonActivity.mActivity
+            content_resolver = context.getContentResolver()
+            
+            # Получаем документы из папки
+            children_uris = DocumentsContract.buildChildDocumentsUriUsingTree(
+                folder_uri, 
+                DocumentsContract.getDocumentId(folder_uri)
+            )
+            
+            cursor = content_resolver.query(
+                children_uris,
+                None, None, None, None
+            )
+            
+            if not cursor:
+                self.show_info_popup("No Files", "No audio files found in selected folder")
+                return
+            
+            processed_count = 0
+            try:
+                while cursor.moveToNext():
+                    display_name_index = cursor.getColumnIndex("_display_name")
+                    if display_name_index != -1:
+                        filename = cursor.getString(display_name_index)
+                        if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                            document_id = cursor.getString(cursor.getColumnIndex("document_id"))
+                            document_uri = DocumentsContract.buildDocumentUriUsingTree(
+                                folder_uri, document_id
+                            )
+                            self.process_android_uri(document_uri)
+                            processed_count += 1
+            finally:
+                cursor.close()
+            
+            if processed_count == 0:
+                self.show_info_popup("No Audio Files", "No audio files found in selected folder")
+            else:
+                self.show_info_popup("Success", f"Processing {processed_count} audio files...")
+                
+        except Exception as e:
+            print(f"Error processing folder: {e}")
+            self.show_error_popup(f"Error processing folder: {str(e)}")
 
     def open_desktop_file_picker(self):
         """Файловый пикер для desktop"""
