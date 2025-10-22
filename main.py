@@ -421,7 +421,9 @@ class MyApp(App):
         self.settings_file = os.path.join(self.save_dir, "app_settings.json")
         print(f"Save directory: {self.save_dir}")
 
+        # ВАЖНО: Создаем директорию ДО загрузки настроек
         os.makedirs(self.save_dir, exist_ok=True)
+        
         self.buttons = []
         self.pin_active = False
         self.sound_settings = {}
@@ -676,9 +678,12 @@ class MyApp(App):
                 
                 print(f"File processing completed. Processed {len(processed_files)} files")
                 
-                # Обновляем интерфейс ОДИН раз после обработки всех файлов
+                # ВАЖНО: Двойное обновление для гарантии
                 if processed_files:
-                    Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                    # Сначала немедленно обновляем
+                    Clock.schedule_once(lambda dt: self.delayed_load_sounds(), 0.1)
+                    # Затем еще раз через 1 секунду для надежности
+                    Clock.schedule_once(lambda dt: self.force_reload_sounds(), 1.0)
                     self.show_info_popup("Success", f"Added {len(processed_files)} audio files")
                 
             else:
@@ -810,6 +815,7 @@ class MyApp(App):
     def load_existing_sounds(self):
         """Загружает существующие звуки"""
         print(f"Loading sounds from: {self.save_dir}")
+        print(f"Directory exists: {os.path.exists(self.save_dir)}")
         
         if not os.path.exists(self.save_dir):
             print(f"Creating directory: {self.save_dir}")
@@ -942,23 +948,53 @@ class MyApp(App):
         )
         content.add_widget(title_label)
         
-        btn_layout = BoxLayout(orientation='vertical', spacing=10, size_hint_y=None, height=150)
+        # Горизонтальный layout для кнопок
+        btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
         
+        # Кнопка выбора файлов - с закругленными краями
         file_btn = Button(
-            text="Select Audio Files",
-            size_hint_y=None,
-            height=60,
-            background_color=(0.3, 0.6, 0.9, 1)
+            text="Select Audio\nFiles",
+            size_hint=(None, None),
+            width=160,  # Соотношение 2:1 (160:80)
+            height=80,
+            background_color=(0.3, 0.6, 0.9, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='16sp',
+            halign='center',
+            valign='middle'
         )
+        file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
+        
+        # Кнопка выбора папки (только для desktop)
+        folder_btn = Button(
+            text="Select\nFolder",
+            size_hint=(None, None),
+            width=160,  # Соотношение 2:1 (160:80)
+            height=80,
+            background_color=(0.4, 0.7, 0.4, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='16sp',
+            halign='center',
+            valign='middle'
+        )
+        folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         
         btn_layout.add_widget(file_btn)
+        
+        # Для Android не показываем кнопку выбора папки
+        if platform != 'android':
+            btn_layout.add_widget(folder_btn)
+        
         content.add_widget(btn_layout)
         
         cancel_btn = Button(
             text="Cancel",
             size_hint_y=None,
             height=50,
-            background_color=(0.8, 0.3, 0.3, 1)
+            background_color=(0.8, 0.3, 0.3, 1),
+            background_normal=''
         )
         content.add_widget(cancel_btn)
         
@@ -969,7 +1005,6 @@ class MyApp(App):
             auto_dismiss=False
         )
         
-        file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
         cancel_btn.bind(on_release=popup.dismiss)
         
         popup.open()
@@ -979,12 +1014,25 @@ class MyApp(App):
         popup.dismiss()
         self.open_file_picker()
 
+    def _folder_picker_selected(self, popup):
+        """Обработчик выбора папки"""
+        popup.dismiss()
+        self.open_folder_picker()
+
     def open_file_picker(self):
         """Открывает выбор файлов"""
         if platform == 'android':
             self.open_android_file_picker()
         else:
             self.open_desktop_file_picker()
+
+    def open_folder_picker(self):
+        """Открывает выбор папки"""
+        if platform == 'android':
+            # На Android используем множественный выбор файлов вместо папки
+            self.show_info_popup("Info", "On Android, please use 'Select Audio Files' for multiple file selection")
+        else:
+            self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
         """Открывает файловый пикер на Android"""
@@ -1049,6 +1097,25 @@ class MyApp(App):
             print(f"Error in file picker: {e}")
             self.show_error_popup(f"Error selecting files: {str(e)}")
 
+    def open_desktop_folder_picker(self):
+        """Выбор папки для desktop"""
+        try:
+            from tkinter import Tk, filedialog
+            
+            root = Tk()
+            root.withdraw()
+            
+            folder_path = filedialog.askdirectory(title="Select Folder with Audio Files")
+            
+            root.destroy()
+            
+            if folder_path:
+                self.copy_audio_from_folder(folder_path)
+                
+        except Exception as e:
+            print(f"Error in folder picker: {e}")
+            self.show_error_popup(f"Error selecting folder: {str(e)}")
+
     def copy_audio_file(self, file_path):
         """Копирует аудио файл"""
         try:
@@ -1076,6 +1143,39 @@ class MyApp(App):
         except Exception as e:
             print(f"Error copying file: {e}")
             return False
+
+    def copy_audio_from_folder(self, folder_path):
+        """Копирует все аудио файлы из папки"""
+        try:
+            audio_files = []
+            for filename in os.listdir(folder_path):
+                if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                    audio_files.append(filename)
+            
+            if not audio_files:
+                self.show_info_popup("No Audio Files", "No audio files found in selected folder")
+                return
+            
+            copied_count = 0
+            for filename in audio_files:
+                src_path = os.path.join(folder_path, filename)
+                if self.copy_audio_file(src_path):
+                    copied_count += 1
+            
+            if copied_count > 0:
+                self.show_info_popup("Complete", f"Added {copied_count} audio files")
+                Clock.schedule_once(self.delayed_load_sounds, 0.5)
+            else:
+                self.show_info_popup("Error", "No files were added")
+            
+        except Exception as e:
+            print(f"Error copying from folder: {e}")
+            self.show_error_popup(f"Error copying files: {str(e)}")
+
+    def force_reload_sounds(self):
+        """Принудительно перезагружает все звуки из папки saved_sounds"""
+        print("Force reloading sounds...")
+        self.load_existing_sounds()
 
     def open_settings(self, instance):
         """Открывает настройки"""
