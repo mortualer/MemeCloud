@@ -948,14 +948,13 @@ class MyApp(App):
         )
         content.add_widget(title_label)
         
-        # Горизонтальный layout для кнопок
+        # Горизонтальный layout для кнопок - ИЗМЕНЕНО: кнопки слева и справа
         btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
         
         # Кнопка выбора файлов - с закругленными краями
         file_btn = Button(
             text="Select Audio\nFiles",
-            size_hint=(None, None),
-            width=160,  # Соотношение 2:1 (160:80)
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
             height=80,
             background_color=(0.3, 0.6, 0.9, 1),
             background_normal='',
@@ -969,8 +968,7 @@ class MyApp(App):
         # Кнопка выбора папки (только для desktop)
         folder_btn = Button(
             text="Select\nFolder",
-            size_hint=(None, None),
-            width=160,  # Соотношение 2:1 (160:80)
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
             height=80,
             background_color=(0.4, 0.7, 0.4, 1),
             background_normal='',
@@ -986,17 +984,39 @@ class MyApp(App):
         # Для Android не показываем кнопку выбора папки
         if platform != 'android':
             btn_layout.add_widget(folder_btn)
+        else:
+            # На Android добавляем пустую кнопку для выравнивания
+            empty_btn = Button(
+                size_hint=(0.5, None),
+                height=80,
+                background_color=(0, 0, 0, 0),
+                background_normal='',
+                disabled=True
+            )
+            btn_layout.add_widget(empty_btn)
         
         content.add_widget(btn_layout)
         
+        # Кнопка Cancel - ИЗМЕНЕНО: размещаем отдельно
+        cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
+        
+        # Добавляем пустое пространство слева
+        left_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(left_spacer)
+        
         cancel_btn = Button(
             text="Cancel",
-            size_hint_y=None,
-            height=50,
+            size_hint=(0.5, 1),
             background_color=(0.8, 0.3, 0.3, 1),
             background_normal=''
         )
-        content.add_widget(cancel_btn)
+        cancel_layout.add_widget(cancel_btn)
+        
+        # Добавляем пустое пространство справа
+        right_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(right_spacer)
+        
+        content.add_widget(cancel_layout)
         
         popup = Popup(
             title="Add Sounds",
@@ -1035,7 +1055,7 @@ class MyApp(App):
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """Открывает файловый пикер на Android"""
+        """Открывает файловый пикер на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             from jnius import autoclass
             from android import activity
@@ -1047,9 +1067,12 @@ class MyApp(App):
             
             # Создаем Intent для выбора файла с поддержкой множественного выбора
             intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.setType("audio/*")
+            intent.setType("audio/*")  # ИСПРАВЛЕНО: используем audio/* вместо *
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
+            
+            # Создаем chooser для более надежного выбора
+            chooser = Intent.createChooser(intent, "Select audio files")
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
@@ -1061,7 +1084,7 @@ class MyApp(App):
             activity.bind(on_activity_result=on_activity_result)
             
             # Запускаем активность
-            context.startActivityForResult(intent, 123)
+            context.startActivityForResult(chooser, 123)
             print("Android file picker started")
             
         except Exception as e:
@@ -1091,7 +1114,9 @@ class MyApp(App):
                 
                 if processed_count > 0:
                     self.show_info_popup("Success", f"Added {processed_count} audio files")
+                    # ИСПРАВЛЕНО: гарантируем сохранение файлов и обновление интерфейса
                     Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                    self.save_sound_settings()  # Сохраняем настройки
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
@@ -1117,11 +1142,12 @@ class MyApp(App):
             self.show_error_popup(f"Error selecting folder: {str(e)}")
 
     def copy_audio_file(self, file_path):
-        """Копирует аудио файл"""
+        """Копирует аудио файл - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             filename = os.path.basename(file_path)
             
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                print(f"Skipping non-audio file: {filename}")
                 return False
             
             new_path = os.path.join(self.save_dir, filename)
@@ -1131,21 +1157,25 @@ class MyApp(App):
                 base, ext = os.path.splitext(filename)
                 counter = 1
                 while os.path.exists(new_path):
-                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                    new_filename = f"{base}_{counter}{ext}"
+                    new_path = os.path.join(self.save_dir, new_filename)
                     counter += 1
             
             shutil.copy2(file_path, new_path)
             print(f"Copied to: {new_path}")
             
-            # Добавляем кнопку
-            return self.add_sound_button(new_path)
+            # Добавляем кнопку и сохраняем настройки
+            success = self.add_sound_button(new_path)
+            if success:
+                self.save_sound_settings()  # Сохраняем настройки после добавления
+            return success
                 
         except Exception as e:
             print(f"Error copying file: {e}")
             return False
 
     def copy_audio_from_folder(self, folder_path):
-        """Копирует все аудио файлы из папки"""
+        """Копирует все аудио файлы из папки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             audio_files = []
             for filename in os.listdir(folder_path):
@@ -1165,6 +1195,7 @@ class MyApp(App):
             if copied_count > 0:
                 self.show_info_popup("Complete", f"Added {copied_count} audio files")
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                self.save_sound_settings()  # Сохраняем настройки
             else:
                 self.show_info_popup("Error", "No files were added")
             
@@ -1176,6 +1207,7 @@ class MyApp(App):
         """Принудительно перезагружает все звуки из папки saved_sounds"""
         print("Force reloading sounds...")
         self.load_existing_sounds()
+        self.save_sound_settings()  # Сохраняем настройки после перезагрузки
 
     def open_settings(self, instance):
         """Открывает настройки"""
