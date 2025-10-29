@@ -1065,14 +1065,26 @@ class MyApp(App):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # Создаем Intent для выбора файла с поддержкой множественного выбора
+            # ИСПРАВЛЕНИЕ: Создаем Intent с явным указанием MIME типов для аудио
             intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.setType("audio/*")  # ИСПРАВЛЕНО: используем audio/* вместо *
+            
+            # Указываем конкретные MIME типы для аудио файлов
+            intent.setType("audio/*")
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, [
+                "audio/mpeg",      # MP3
+                "audio/mp3",       # MP3
+                "audio/wav",       # WAV
+                "audio/x-wav",     # WAV
+                "audio/ogg",       # OGG
+                "audio/x-ogg"      # OGG
+            ])
+            
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
             
-            # Создаем chooser для более надежного выбора
-            chooser = Intent.createChooser(intent, "Select audio files")
+            # Создаем chooser с явным заголовком
+            chooser_title = "Select audio files (MP3, WAV, OGG)"
+            chooser = Intent.createChooser(intent, chooser_title)
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
@@ -1085,7 +1097,7 @@ class MyApp(App):
             
             # Запускаем активность
             context.startActivityForResult(chooser, 123)
-            print("Android file picker started")
+            print("Android file picker started for audio files only")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
