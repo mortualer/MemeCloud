@@ -606,25 +606,38 @@ class MyApp(App):
             try:
                 print("Requesting Android permissions...")
                 
-                # Базовые разрешения
-                permissions = [
-                    Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE,
-                    Permission.INTERNET
-                ]
-                
-                # Для Android 13+
+                # Для разных версий Android разные разрешения
                 if hasattr(Permission, 'READ_MEDIA_AUDIO'):
-                    permissions = [
-                        Permission.READ_MEDIA_AUDIO,
-                        Permission.INTERNET
-                    ]
+                    # Android 13+
+                    permissions = [Permission.READ_MEDIA_AUDIO]
+                    print("Requesting READ_MEDIA_AUDIO for Android 13+")
+                else:
+                    # Android < 13
+                    permissions = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
+                    print("Requesting READ/WRITE_EXTERNAL_STORAGE for Android < 13")
+                
+                # Добавляем INTERNET для проверки обновлений
+                permissions.append(Permission.INTERNET)
                 
                 print(f"Requesting permissions: {permissions}")
-                request_permissions(permissions, self.permission_callback)
                 
+                # Проверяем, есть ли уже разрешения
+                all_granted = True
+                for perm in permissions:
+                    if not check_permission(perm):
+                        all_granted = False
+                        break
+                
+                if all_granted:
+                    print("All permissions already granted")
+                    self.permissions_granted = True
+                else:
+                    print("Requesting missing permissions")
+                    request_permissions(permissions, self.permission_callback)
+                    
             except Exception as e:
                 print(f"Permission request error: {e}")
+                self.show_error_popup("Permission Error", f"Permission request error: {str(e)}")
 
     def permission_callback(self, permissions, grant_results):
         """Обратный вызов после запроса разрешений"""
@@ -633,11 +646,24 @@ class MyApp(App):
         if all(grant_results):
             print("All permissions granted")
             self.permissions_granted = True
-            self.show_info_popup("Success", "All permissions granted")
+            self.show_info_popup("Success", "Permissions granted! You can now select audio files.")
         else:
             print("Some permissions denied")
             self.permissions_granted = False
-            self.show_info_popup("Warning", "Some permissions were denied")
+            denied_permissions = []
+            for i, granted in enumerate(grant_results):
+                if not granted:
+                    denied_permissions.append(permissions[i])
+            
+            denied_text = ", ".join(denied_permissions)
+            self.show_error_popup(
+                "Permissions Required", 
+                f"The following permissions were denied: {denied_text}\n\n"
+                "Without these permissions, the app cannot access your audio files.\n\n"
+                "Please go to:\n"
+                "Settings → Apps → MemeCloud → Permissions\n"
+                "and grant the required permissions."
+            )
 
     def on_activity_result(self, request_code, result_code, intent):
         """Обрабатывает результат выбора файлов на Android"""
@@ -691,7 +717,7 @@ class MyApp(App):
                 
         except Exception as e:
             print(f"Error processing activity result: {e}")
-            self.show_error_popup(f"Error processing selected files: {str(e)}")
+            self.show_error_popup("File Processing Error", f"Error processing selected files: {str(e)}")
 
     def process_android_uri(self, uri):
         """Обрабатывает URI файла на Android и возвращает имя файла если успешно"""
@@ -752,7 +778,7 @@ class MyApp(App):
                 
         except Exception as e:
             print(f"Error processing Android URI: {e}")
-            self.show_error_popup(f"Error processing file: {str(e)}")
+            self.show_error_popup("File Processing Error", f"Error processing file: {str(e)}")
             return None
 
     def load_settings(self):
@@ -934,7 +960,7 @@ class MyApp(App):
                     
         except Exception as e:
             print(f"Error deleting sound: {e}")
-            self.show_error_popup("Error deleting sound")
+            self.show_error_popup("Delete Error", "Error deleting sound")
 
     def show_upload_options(self, instance):
         """Показывает опции загрузки"""
@@ -1056,7 +1082,20 @@ class MyApp(App):
 
     def open_android_file_picker(self):
         """Открывает файловый пикер на Android"""
+        if platform != 'android':
+            return
+            
         try:
+            # Проверяем разрешения перед открытием пикера
+            if not self.permissions_granted:
+                self.show_error_popup(
+                    "Permissions Required", 
+                    "Please grant storage permissions first!\n\n"
+                    "Press the 'Permissions' button in settings or "
+                    "grant permissions in system settings."
+                )
+                return
+                
             from jnius import autoclass
             from android import activity
             
@@ -1064,25 +1103,23 @@ class MyApp(App):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # Простой и надежный Intent для выбора файлов
+            # Создаем Intent для выбора аудио файлов
             intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.setType("*/*")  # Разрешаем все типы файлов
-            
-            # Фильтруем только аудио файлы
+            intent.setType("audio/*")
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
             intent.putExtra(Intent.EXTRA_MIME_TYPES, [
-                "audio/mpeg",
-                "audio/mp3", 
-                "audio/wav",
+                "audio/mpeg", 
+                "audio/mp3",
+                "audio/wav", 
                 "audio/x-wav",
-                "audio/ogg",
+                "audio/ogg", 
                 "audio/x-ogg"
             ])
             
-            intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
-            
             # Создаем chooser
-            chooser = Intent.createChooser(intent, "Select audio files")
+            chooser_title = "Select audio files (MP3, WAV, OGG)"
+            chooser = Intent.createChooser(intent, chooser_title)
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
@@ -1099,7 +1136,11 @@ class MyApp(App):
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
-            self.show_error_popup(f"Cannot open file picker: {str(e)}")
+            self.show_error_popup(
+                "File Picker Error", 
+                f"Cannot open file picker: {str(e)}\n\n"
+                "Make sure you have granted storage permissions."
+            )
 
     def open_desktop_file_picker(self):
         """Файловый пикер для desktop"""
@@ -1129,7 +1170,7 @@ class MyApp(App):
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
-            self.show_error_popup(f"Error selecting files: {str(e)}")
+            self.show_error_popup("File Picker Error", f"Error selecting files: {str(e)}")
 
     def open_desktop_folder_picker(self):
         """Выбор папки для desktop"""
@@ -1148,7 +1189,7 @@ class MyApp(App):
                 
         except Exception as e:
             print(f"Error in folder picker: {e}")
-            self.show_error_popup(f"Error selecting folder: {str(e)}")
+            self.show_error_popup("Folder Picker Error", f"Error selecting folder: {str(e)}")
 
     def copy_audio_file(self, file_path):
         """Копирует аудио файл"""
@@ -1209,7 +1250,7 @@ class MyApp(App):
             
         except Exception as e:
             print(f"Error copying from folder: {e}")
-            self.show_error_popup(f"Error copying files: {str(e)}")
+            self.show_error_popup("Folder Copy Error", f"Error copying files: {str(e)}")
 
     def force_reload_sounds(self):
         """Принудительно перезагружает все звуки из папки saved_sounds"""
@@ -1244,11 +1285,11 @@ Debug Info:
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
         
         if platform == 'android':
-            # Кнопка Permissions с уменьшенным шрифтом
+            # Кнопка Permissions с исправленным обработчиком
             perm_btn = Button(
                 text="Permissions", 
                 background_color=(0.4, 0.4, 0.6, 1),
-                font_size='12sp'  # Уменьшаем шрифт чтобы поместилось
+                font_size='12sp'
             )
             perm_btn.bind(on_release=lambda x: self.request_android_permissions())
             btn_layout.add_widget(perm_btn)
@@ -1304,14 +1345,37 @@ Debug Info:
             btn_widget.disabled = not visible
             btn_widget.height = 150 if visible else 0
 
-    def show_error_popup(self, message):
-        """Показывает popup с ошибкой"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        content.add_widget(Label(text=message))
-        close_btn = Button(text="OK", size_hint_y=None, height=50)
+    def show_error_popup(self, title, message):
+        """Показывает детальный popup с ошибкой"""
+        content = BoxLayout(orientation='vertical', spacing=15, padding=20)
+        
+        message_label = Label(
+            text=message,
+            size_hint_y=0.7,
+            text_size=(Window.width * 0.7 - 40, None),
+            halign='left',
+            valign='top'
+        )
+        message_label.bind(size=message_label.setter('text_size'))
+        
+        scroll_view = ScrollView(size_hint_y=0.7)
+        scroll_view.add_widget(message_label)
+        content.add_widget(scroll_view)
+        
+        close_btn = Button(
+            text="OK", 
+            size_hint_y=None, 
+            height=50,
+            background_color=(0.8, 0.3, 0.3, 1)
+        )
         content.add_widget(close_btn)
         
-        popup = Popup(title="Error", content=content, size_hint=(0.6, 0.3))
+        popup = Popup(
+            title=title,
+            content=content, 
+            size_hint=(0.8, 0.6),
+            auto_dismiss=False
+        )
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
