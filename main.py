@@ -46,7 +46,7 @@ class SoundButton(BoxLayout):
         self.original_icon_path = icon_path
         self.highlight_anim = None
         self.sound_check_event = None
-        self.expanded_view = None  # Ссылка на расширенное представление
+        self.expanded_view = None
 
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
@@ -97,14 +97,12 @@ class SoundButton(BoxLayout):
             self.sound.stop()
             self.sound.play()
             self.start_highlight()
-            # Отменяем предыдущую проверку и запускаем новую
             if self.sound_check_event:
                 self.sound_check_event.cancel()
             self.sound_check_event = Clock.schedule_interval(self.check_sound, 0.1)
 
     def start_highlight(self):
         self.stop_highlight()
-        # Более плавная анимация подсветки
         anim = Animation(rgba=(0.4, 0.4, 0.6, 1), duration=0.3) + \
                Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.4)
         anim.repeat = True
@@ -115,27 +113,22 @@ class SoundButton(BoxLayout):
         if self.highlight_anim:
             self.highlight_anim.cancel(self.bg_color)
             self.highlight_anim = None
-        # Плавное возвращение к исходному цвету
         Animation(rgba=(0.25, 0.25, 0.35, 1), duration=0.2).start(self.bg_color)
 
     def check_sound(self, dt):
         if self.sound and self.sound.state != 'play':
-            # Звук закончил воспроизведение
             self.stop_highlight()
-            # Отменяем проверку
             if self.sound_check_event:
                 self.sound_check_event.cancel()
                 self.sound_check_event = None
             
-            # Сворачиваем если развернуто и не закреплено
             if self.is_expanded and not getattr(App.get_running_app(), "pin_active", False):
                 self.collapse()
-            return False  # Останавливаем проверку
-        return True  # Продолжаем проверку
+            return False
+        return True
 
     def start_long_press(self, instance, touch):
         if instance.collide_point(*touch.pos):
-            # Визуальный feedback при начале long press
             Animation(background_color=(0.3, 0.3, 0.5, 0.3), duration=0.1).start(self.button)
             self._long_press_trigger()
         return False
@@ -143,7 +136,6 @@ class SoundButton(BoxLayout):
     def end_long_press(self, instance, touch):
         if self._long_press_trigger.is_triggered:
             self._long_press_trigger.cancel()
-            # Возвращаем цвет кнопки
             Animation(background_color=(0, 0, 0, 0), duration=0.2).start(self.button)
         return False
 
@@ -151,26 +143,20 @@ class SoundButton(BoxLayout):
         if self.is_expanded:
             return
         
-        # Сворачиваем другие развернутые кнопки
         if self.app:
             for btn in self.app.buttons:
                 if btn != self and btn.is_expanded and not getattr(self.app, "pin_active", False):
                     btn.collapse()
         
         self.is_expanded = True
-        
-        # Сохраняем оригинальную позицию и размер для возврата
         self.original_pos = self.pos[:]
         self.original_size = self.size[:]
         
-        # Создаем расширенное представление
         self.create_expanded_view()
         
-        # Рассчитываем высоту для расширенного состояния (под верхней панелью)
-        top_bar_height = 75  # Высота верхней панели
-        expanded_height = Window.height - top_bar_height - 20  # -20 для отступов
+        top_bar_height = 75
+        expanded_height = Window.height - top_bar_height - 20
         
-        # Плавная анимация расширения
         anim = Animation(
             height=expanded_height, 
             duration=0.5, 
@@ -180,17 +166,13 @@ class SoundButton(BoxLayout):
         anim.start(self)
 
     def on_expand_complete(self, *args):
-        """Вызывается после завершения анимации расширения"""
-        # Воспроизводим звук после завершения анимации
         self.play_sound()
 
     def create_expanded_view(self):
         self.clear_widgets()
         
-        # Основной контейнер расширенного вида
         self.expanded_view = BoxLayout(orientation='vertical', spacing=20, padding=30)
         
-        # Заголовок с возможностью проигрывания по клику
         title_label = Label(
             text=self.btn_text,
             size_hint_y=None,
@@ -202,15 +184,13 @@ class SoundButton(BoxLayout):
         title_label.bind(on_touch_down=self.on_title_touch)
         self.expanded_view.add_widget(title_label)
         
-        # Контейнер для кнопок управления
         controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=250)
         
-        # Кнопка проигрывания
         play_btn = Button(
             text='PLAY SOUND',
             size_hint_y=None,
             height=100,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='22sp',
@@ -220,13 +200,12 @@ class SoundButton(BoxLayout):
         play_btn.bind(on_release=self.on_play_button_release)
         controls_layout.add_widget(play_btn)
         
-        # Кнопки управления
         btn_layout = BoxLayout(size_hint_y=None, height=100, spacing=15)
         
         delete_btn = Button(
             text='DELETE',
             size_hint_x=0.6,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -238,7 +217,7 @@ class SoundButton(BoxLayout):
         close_btn = Button(
             text='CLOSE',
             size_hint_x=0.4,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -252,37 +231,29 @@ class SoundButton(BoxLayout):
         self.add_widget(self.expanded_view)
 
     def on_play_button_press(self, instance):
-        """Анимация при нажатии кнопки play"""
         Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_play_button_release(self, instance):
-        """Анимация при отпускании кнопки play"""
         Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.play_sound()
 
     def on_delete_button_press(self, instance):
-        """Анимация при нажатии кнопки delete"""
         Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_delete_button_release(self, instance):
-        """Анимация при отпускании кнопки delete"""
         Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.delete_sound(instance)
 
     def on_close_button_press(self, instance):
-        """Анимация при нажатии кнопки close"""
         Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
 
     def on_close_button_release(self, instance):
-        """Анимация при отпускании кнопки close"""
         Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
         self.collapse()
 
     def on_title_touch(self, instance, touch):
-        """Обработка клика по заголовку для проигрывания звука"""
         if self.is_expanded and instance.collide_point(*touch.pos):
             if touch.is_double_tap:
-                # Анимация при двойном клике
                 anim = Animation(color=(0.8, 0.8, 1, 1), duration=0.1)
                 anim += Animation(color=(1, 1, 1, 1), duration=0.3)
                 anim.start(instance)
@@ -305,7 +276,6 @@ class SoundButton(BoxLayout):
         
         content = BoxLayout(orientation='vertical', spacing=15, padding=20)
         
-        # Анимированный заголовок
         question_label = Label(
             text=f'Delete "{self.btn_text}"?',
             font_size='20sp',
@@ -342,7 +312,6 @@ class SoundButton(BoxLayout):
             separator_color=(0.3, 0.3, 0.4, 1)
         )
         
-        # Анимация появления popup
         popup.content.opacity = 0
         popup.open()
         Animation(opacity=1, duration=0.3).start(popup.content)
@@ -356,7 +325,6 @@ class SoundButton(BoxLayout):
         
         self.is_expanded = False
         
-        # Сначала анимируем исчезновение внутреннего содержимого
         if self.expanded_view:
             anim_opacity = Animation(opacity=0, duration=0.2)
             anim_opacity.bind(on_complete=self._start_collapse_animation)
@@ -365,10 +333,8 @@ class SoundButton(BoxLayout):
             self._start_collapse_animation()
 
     def _start_collapse_animation(self, *args):
-        """Начинает анимацию сворачивания после исчезновения содержимого"""
         self.stop_sound_and_collapse()
         
-        # Плавная анимация сворачивания
         anim = Animation(
             height=150, 
             duration=0.4, 
@@ -378,15 +344,12 @@ class SoundButton(BoxLayout):
         anim.start(self)
 
     def on_collapse_complete(self, *args):
-        """Вызывается после завершения анимации сворачивания"""
-        # Восстанавливаем оригинальное представление
         self.restore_original_view()
 
     def restore_original_view(self):
         self.clear_widgets()
         for widget in self.original_widgets:
             self.add_widget(widget)
-        # Сбрасываем прозрачность на случай следующего расширения
         self.opacity = 1
         self.expanded_view = None
 
@@ -399,13 +362,12 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.5"  # ОБНОВЛЕНО ДО 1.2.5
+    CURRENT_VERSION = "1.2.5"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-        # Упрощенная логика путей
         if platform == 'android':
             try:
                 from android.storage import app_storage_path
@@ -421,7 +383,6 @@ class MyApp(App):
         self.settings_file = os.path.join(self.save_dir, "app_settings.json")
         print(f"Save directory: {self.save_dir}")
 
-        # ВАЖНО: Создаем директорию ДО загрузки настроек
         os.makedirs(self.save_dir, exist_ok=True)
         
         self.buttons = []
@@ -434,48 +395,38 @@ class MyApp(App):
         try:
             print("Starting app build...")
             
-            # Сначала создаем простой интерфейс
             Window.clearcolor = (0.95, 0.95, 0.98, 1)
             self.root = BoxLayout(orientation='vertical', spacing=10, padding=10)
             
-            # Сразу создаем основной интерфейс
             self.create_main_interface()
             
-            # Загружаем звуки
             Clock.schedule_once(self.delayed_load_sounds, 0.5)
             
-            # Запрашиваем разрешения на Android
             if platform == 'android':
                 Clock.schedule_once(self.request_android_permissions, 1)
                 
-            # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
             return self.root
             
         except Exception as e:
             print(f"Error in build: {e}")
-            # Фолбэк интерфейс
             error_label = Label(text=f"Error: {str(e)}", font_size='20sp')
             return error_label
 
     def delayed_load_sounds(self, dt):
-        """Отложенная загрузка звуков"""
         try:
             self.load_existing_sounds()
         except Exception as e:
             print(f"Error in delayed_load_sounds: {e}")
 
     def delayed_check_update(self, dt):
-        """Отложенная проверка обновлений"""
         try:
             self.check_for_update()
         except Exception as e:
             print(f"Error in delayed_check_update: {e}")
 
     def create_main_interface(self):
-        """Создает основной интерфейс приложения"""
-        # Верхняя панель
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
         self.search_input = TextInput(
@@ -490,12 +441,11 @@ class MyApp(App):
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
-        # Кнопка Pin - пурпурного цвета как у звуковых кнопок
         self.pin_button = Button(
             text="Pin", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -503,12 +453,11 @@ class MyApp(App):
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        # Кнопка Upload - пурпурного цвета
         self.upload_button = Button(
             text="Upload", 
             size_hint=(None, 1), 
             width=175,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -516,12 +465,11 @@ class MyApp(App):
         self.upload_button.bind(on_release=self.show_upload_options)
         top_bar.add_widget(self.upload_button)
 
-        # Кнопка Info - пурпурного цвета
         self.settings_button = Button(
             text="i", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -531,7 +479,6 @@ class MyApp(App):
 
         self.root.add_widget(top_bar)
 
-        # Область прокрутки для звуков
         self.scroll = ScrollView(size_hint=(1, 1))
         self.layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None)
         self.layout.bind(minimum_height=self.layout.setter('height'))
@@ -540,19 +487,16 @@ class MyApp(App):
 
     def on_start(self):
         print("App started successfully")
-        # Копируем встроенные звуки
         self.copy_builtin_sounds()
 
     def copy_builtin_sounds(self):
-        """Копирует встроенные звуки в рабочую директорию"""
         try:
             print("Copying built-in sounds...")
             
-            # Ищем папку со звуками в разных возможных местах
             possible_paths = [
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "saved_sounds"),
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "saved_sounds"),  # Для GitHub структуры
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "saved_sounds"),
             ]
             
             source_dir = None
@@ -566,21 +510,18 @@ class MyApp(App):
                 print("No built-in sounds directory found")
                 return
             
-            # Собираем все файлы для копирования
             files_to_copy = []
             for filename in os.listdir(source_dir):
                 if filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                     src_path = os.path.join(source_dir, filename)
                     dst_path = os.path.join(self.save_dir, filename)
                     
-                    # Копируем только если файл еще не существует
                     if not os.path.exists(dst_path):
                         files_to_copy.append((src_path, dst_path, filename))
             
             if files_to_copy:
                 print(f"Found {len(files_to_copy)} new sounds to copy")
                 
-                # Копируем все файлы сразу
                 copied_count = 0
                 for src_path, dst_path, filename in files_to_copy:
                     try:
@@ -591,8 +532,6 @@ class MyApp(App):
                         print(f"Error copying {filename}: {e}")
                 
                 print(f"Successfully copied {copied_count} built-in sounds")
-                
-                # ОДИН раз обновляем интерфейс после копирования всех файлов
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
             else:
                 print("No new sounds to copy")
@@ -601,19 +540,16 @@ class MyApp(App):
             print(f"Error copying built-in sounds: {e}")
 
     def request_android_permissions(self, dt=None):
-        """Запрашивает разрешения на Android"""
         if platform == 'android':
             try:
                 print("Requesting Android permissions...")
                 
-                # Базовые разрешения
                 permissions = [
                     Permission.READ_EXTERNAL_STORAGE,
                     Permission.WRITE_EXTERNAL_STORAGE,
                     Permission.INTERNET
                 ]
                 
-                # Для Android 13+
                 if hasattr(Permission, 'READ_MEDIA_AUDIO'):
                     permissions = [
                         Permission.READ_MEDIA_AUDIO,
@@ -627,7 +563,6 @@ class MyApp(App):
                 print(f"Permission request error: {e}")
 
     def permission_callback(self, permissions, grant_results):
-        """Обратный вызов после запроса разрешений"""
         print(f"Permission callback: {permissions}, {grant_results}")
         
         if all(grant_results):
@@ -640,7 +575,6 @@ class MyApp(App):
             self.show_info_popup("Warning", "Some permissions were denied")
 
     def on_activity_result(self, request_code, result_code, intent):
-        """Обрабатывает результат выбора файлов на Android"""
         print(f"Activity result: request_code={request_code}, result_code={result_code}")
         
         if request_code != 123:
@@ -658,7 +592,6 @@ class MyApp(App):
                 processed_files = []
                 
                 if clip_data is not None:
-                    # Множественный выбор
                     count = clip_data.getItemCount()
                     print(f"Multiple files selected: {count}")
                     for i in range(count):
@@ -668,7 +601,6 @@ class MyApp(App):
                         if result:
                             processed_files.append(result)
                 else:
-                    # Одиночный выбор
                     uri = intent.getData()
                     if uri is not None:
                         print(f"Single file selected: {uri}")
@@ -678,11 +610,8 @@ class MyApp(App):
                 
                 print(f"File processing completed. Processed {len(processed_files)} files")
                 
-                # ВАЖНО: Двойное обновление для гарантии
                 if processed_files:
-                    # Сначала немедленно обновляем
                     Clock.schedule_once(lambda dt: self.delayed_load_sounds(), 0.1)
-                    # Затем еще раз через 1 секунду для надежности
                     Clock.schedule_once(lambda dt: self.force_reload_sounds(), 1.0)
                     self.show_info_popup("Success", f"Added {len(processed_files)} audio files")
                 
@@ -694,7 +623,6 @@ class MyApp(App):
             self.show_error_popup(f"Error processing selected files: {str(e)}")
 
     def process_android_uri(self, uri):
-        """Обрабатывает URI файла на Android и возвращает имя файла если успешно"""
         try:
             from jnius import autoclass
             
@@ -705,7 +633,6 @@ class MyApp(App):
             
             content_resolver = context.getContentResolver()
             
-            # Получаем имя файла
             cursor = content_resolver.query(uri, None, None, None, None)
             filename = "audio_file"
             if cursor:
@@ -716,17 +643,14 @@ class MyApp(App):
                 finally:
                     cursor.close()
             
-            # Проверяем расширение файла
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                 print(f"Skipping non-audio file: {filename}")
                 return None
             
             print(f"Processing audio file: {filename}")
             
-            # Создаем путь для сохранения
             new_path = os.path.join(self.save_dir, filename)
             
-            # Если файл с таким именем уже существует, добавляем номер
             if os.path.exists(new_path):
                 base, ext = os.path.splitext(filename)
                 counter = 1
@@ -734,10 +658,8 @@ class MyApp(App):
                     new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                     counter += 1
             
-            # Копируем содержимое файла
             input_stream = content_resolver.openInputStream(uri)
             with open(new_path, 'wb') as out_file:
-                # Читаем и записываем файл по частям
                 buffer_size = 8192
                 buffer = bytearray(buffer_size)
                 bytes_read = input_stream.read(buffer)
@@ -756,7 +678,6 @@ class MyApp(App):
             return None
 
     def load_settings(self):
-        """Загружает настройки приложения"""
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
@@ -771,7 +692,6 @@ class MyApp(App):
             self.sound_settings = {}
 
     def save_sound_settings(self):
-        """Сохраняет настройки звуков"""
         try:
             for btn in self.buttons:
                 if btn.sound_id:
@@ -793,7 +713,6 @@ class MyApp(App):
             print(f"Error saving settings: {e}")
 
     def clean_sound_name(self, filename):
-        """Очищает имя файла для отображения"""
         name = os.path.splitext(filename)[0]
         
         unwanted_phrases = [
@@ -813,7 +732,6 @@ class MyApp(App):
         return name
 
     def load_existing_sounds(self):
-        """Загружает существующие звуки"""
         print(f"Loading sounds from: {self.save_dir}")
         print(f"Directory exists: {os.path.exists(self.save_dir)}")
         
@@ -821,7 +739,6 @@ class MyApp(App):
             print(f"Creating directory: {self.save_dir}")
             os.makedirs(self.save_dir, exist_ok=True)
         
-        # Очищаем текущие кнопки
         self.layout.clear_widgets()
         self.buttons.clear()
         
@@ -829,7 +746,6 @@ class MyApp(App):
         audio_extensions = ('.mp3', '.wav', '.ogg')
         found_files = False
         
-        # Собираем все файлы сначала
         sound_files = []
         for filename in sorted(os.listdir(self.save_dir)):
             if filename.lower().endswith(audio_extensions):
@@ -837,14 +753,12 @@ class MyApp(App):
                 sound_files.append((sound_path, filename))
                 found_files = True
         
-        # Затем добавляем все кнопки сразу
         for sound_path, filename in sound_files:
             print(f"Found audio file: {filename}")
             self.add_sound_button(sound_path)
         
         print(f"Total sounds loaded: {len(self.buttons)}")
         
-        # Если файлов не найдено, показываем сообщение
         if not found_files and len(self.buttons) == 0:
             no_sounds_label = Label(
                 text="No sounds found\n\nUse the Upload button to add audio files",
@@ -857,9 +771,7 @@ class MyApp(App):
             self.layout.add_widget(no_sounds_label)
 
     def add_sound_button(self, path):
-        """Добавляет кнопку звука"""
         try:
-            # Проверяем, не добавлен ли уже этот звук
             filename = os.path.basename(path)
             sound_id = os.path.splitext(filename)[0]
             
@@ -872,7 +784,6 @@ class MyApp(App):
             
             print(f"Loading sound: {filename}")
             
-            # Ищем иконку
             icon_file = None
             icon_extensions = ['.png', '.jpg', '.jpeg']
             for ext in icon_extensions:
@@ -901,7 +812,6 @@ class MyApp(App):
             return False
 
     def delete_sound(self, sound_button):
-        """Удаляет звук"""
         try:
             for btn in self.buttons[:]:
                 if btn == sound_button:
@@ -912,7 +822,6 @@ class MyApp(App):
                     self.buttons.remove(btn)
                     
                     sound_id = btn.sound_id
-                    # Удаляем связанные файлы
                     for filename in os.listdir(self.save_dir):
                         file_base = os.path.splitext(filename)[0]
                         if file_base == sound_id:
@@ -923,12 +832,10 @@ class MyApp(App):
                             except Exception as e:
                                 print(f"Error removing file: {e}")
                     
-                    # Удаляем настройки
                     if sound_id in self.sound_settings:
                         del self.sound_settings[sound_id]
                         self.save_sound_settings()
                     
-                    # Перезагружаем список звуков
                     Clock.schedule_once(self.delayed_load_sounds, 0.1)
                     break
                     
@@ -937,7 +844,6 @@ class MyApp(App):
             self.show_error_popup("Error deleting sound")
 
     def show_upload_options(self, instance):
-        """Показывает адаптивные опции загрузки под разные платформы"""
         content = BoxLayout(orientation='vertical', spacing=15, padding=20)
         
         title_label = Label(
@@ -950,7 +856,6 @@ class MyApp(App):
         content.add_widget(title_label)
         
         if platform == 'android':
-            # Для Android - только две кнопки горизонтально
             btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
             
             file_btn = Button(
@@ -979,7 +884,6 @@ class MyApp(App):
             btn_layout.add_widget(cancel_btn)
             content.add_widget(btn_layout)
             
-            # Информация для Android пользователей
             info_label = Label(
                 text="You can select multiple audio files at once",
                 size_hint_y=None,
@@ -990,8 +894,6 @@ class MyApp(App):
             content.add_widget(info_label)
             
         else:
-            # Для desktop - три кнопки: две сверху, одна снизу
-            # Верхний ряд с двумя кнопками
             top_btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
             
             file_btn = Button(
@@ -1020,7 +922,6 @@ class MyApp(App):
             top_btn_layout.add_widget(folder_btn)
             content.add_widget(top_btn_layout)
             
-            # Нижняя кнопка Cancel на всю ширину
             cancel_btn = Button(
                 text="Cancel",
                 size_hint_y=None,
@@ -1032,10 +933,8 @@ class MyApp(App):
             )
             content.add_widget(cancel_btn)
             
-            # Привязываем обработчик для кнопки папки (только для desktop)
             folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         
-        # Общие обработчики
         file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
         
         popup = Popup(
@@ -1047,7 +946,6 @@ class MyApp(App):
             separator_color=(0.3, 0.3, 0.4, 1)
         )
         
-        # Анимация появления
         popup.content.opacity = 0
         popup.open()
         Animation(opacity=1, duration=0.3).start(popup.content)
@@ -1057,33 +955,27 @@ class MyApp(App):
         return popup
 
     def _file_picker_selected(self, popup):
-        """Обработчик выбора файлового пикера"""
         popup.dismiss()
-        # Добавляем небольшую задержку для плавности
         Clock.schedule_once(lambda dt: self.open_file_picker(), 0.1)
 
     def _folder_picker_selected(self, popup):
-        """Обработчик выбора папки"""
         popup.dismiss()
         Clock.schedule_once(lambda dt: self.open_folder_picker(), 0.1)
 
     def open_file_picker(self):
-        """Открывает выбор файлов"""
         if platform == 'android':
             self.open_android_file_picker()
         else:
             self.open_desktop_file_picker()
 
     def open_folder_picker(self):
-        """Открывает выбор папки"""
         if platform == 'android':
-            # На Android используем множественный выбор файлов вместо папки
             self.show_info_popup("Info", "On Android, please use 'Select Audio Files' for multiple file selection")
         else:
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """Открывает файловый пикер на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """ИСПРАВЛЕННЫЙ метод для открытия файлового пикера на Android"""
         try:
             from jnius import autoclass
             from android import activity
@@ -1093,25 +985,26 @@ class MyApp(App):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # ИСПРАВЛЕНИЕ: Создаем Intent с явным указанием MIME типов для аудио
-            intent = Intent(Intent.ACTION_GET_CONTENT)
+            # Создаем Intent для выбора файлов
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
             
-            # Указываем конкретные MIME типы для аудио файлов
+            # Устанавливаем MIME типы для аудио файлов
             intent.setType("audio/*")
             intent.putExtra(Intent.EXTRA_MIME_TYPES, [
-                "audio/mpeg",      # MP3
-                "audio/mp3",       # MP3
-                "audio/wav",       # WAV
-                "audio/x-wav",     # WAV
-                "audio/ogg",       # OGG
-                "audio/x-ogg"      # OGG
+                "audio/mpeg",
+                "audio/mp3", 
+                "audio/wav",
+                "audio/x-wav",
+                "audio/ogg",
+                "audio/x-ogg"
             ])
             
-            intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
+            # Разрешаем множественный выбор
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
             
-            # Создаем chooser с явным заголовком
-            chooser_title = "Select audio files (MP3, WAV, OGG)"
+            # Создаем chooser
+            chooser_title = "Select Audio Files"
             chooser = Intent.createChooser(intent, chooser_title)
             
             # Регистрируем обработчик результата
@@ -1119,20 +1012,20 @@ class MyApp(App):
                 print(f"File picker result: {request_code}, {result_code}")
                 if request_code == 123:
                     self.on_activity_result(request_code, result_code, intent)
+                    # Отвязываем обработчик после использования
+                    activity.unbind(on_activity_result=on_activity_result)
             
-            # Устанавливаем обработчик
             activity.bind(on_activity_result=on_activity_result)
             
             # Запускаем активность
             context.startActivityForResult(chooser, 123)
-            print("Android file picker started for audio files only")
+            print("Android file picker started successfully")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
             self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
     def open_desktop_file_picker(self):
-        """Файловый пикер для desktop"""
         try:
             from tkinter import Tk, filedialog
             
@@ -1154,16 +1047,14 @@ class MyApp(App):
                 
                 if processed_count > 0:
                     self.show_info_popup("Success", f"Added {processed_count} audio files")
-                    # ИСПРАВЛЕНО: гарантируем сохранение файлов и обновление интерфейса
                     Clock.schedule_once(self.delayed_load_sounds, 0.5)
-                    self.save_sound_settings()  # Сохраняем настройки
+                    self.save_sound_settings()
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
             self.show_error_popup(f"Error selecting files: {str(e)}")
 
     def open_desktop_folder_picker(self):
-        """Выбор папки для desktop"""
         try:
             from tkinter import Tk, filedialog
             
@@ -1182,7 +1073,6 @@ class MyApp(App):
             self.show_error_popup(f"Error selecting folder: {str(e)}")
 
     def copy_audio_file(self, file_path):
-        """Копирует аудио файл - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             filename = os.path.basename(file_path)
             
@@ -1192,7 +1082,6 @@ class MyApp(App):
             
             new_path = os.path.join(self.save_dir, filename)
             
-            # Добавляем номер если файл существует
             if os.path.exists(new_path):
                 base, ext = os.path.splitext(filename)
                 counter = 1
@@ -1204,10 +1093,9 @@ class MyApp(App):
             shutil.copy2(file_path, new_path)
             print(f"Copied to: {new_path}")
             
-            # Добавляем кнопку и сохраняем настройки
             success = self.add_sound_button(new_path)
             if success:
-                self.save_sound_settings()  # Сохраняем настройки после добавления
+                self.save_sound_settings()
             return success
                 
         except Exception as e:
@@ -1215,7 +1103,6 @@ class MyApp(App):
             return False
 
     def copy_audio_from_folder(self, folder_path):
-        """Копирует все аудио файлы из папки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             audio_files = []
             for filename in os.listdir(folder_path):
@@ -1235,7 +1122,7 @@ class MyApp(App):
             if copied_count > 0:
                 self.show_info_popup("Complete", f"Added {copied_count} audio files")
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
-                self.save_sound_settings()  # Сохраняем настройки
+                self.save_sound_settings()
             else:
                 self.show_info_popup("Error", "No files were added")
             
@@ -1244,13 +1131,11 @@ class MyApp(App):
             self.show_error_popup(f"Error copying files: {str(e)}")
 
     def force_reload_sounds(self):
-        """Принудительно перезагружает все звуки из папки saved_sounds"""
         print("Force reloading sounds...")
         self.load_existing_sounds()
-        self.save_sound_settings()  # Сохраняем настройки после перезагрузки
+        self.save_sound_settings()
 
     def open_settings(self, instance):
-        """Открывает настройки"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
         permissions_status = "Granted" if self.permissions_granted else "Not granted"
@@ -1276,11 +1161,10 @@ Debug Info:
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
         
         if platform == 'android':
-            # Кнопка Permissions с уменьшенным шрифтом
             perm_btn = Button(
                 text="Permissions", 
                 background_color=(0.4, 0.4, 0.6, 1),
-                font_size='12sp'  # Уменьшаем шрифт чтобы поместилось
+                font_size='12sp'
             )
             perm_btn.bind(on_release=lambda x: self.request_android_permissions())
             btn_layout.add_widget(perm_btn)
@@ -1310,13 +1194,12 @@ Debug Info:
         popup.open()
 
     def toggle_pin(self, instance):
-        """Переключает режим закрепления"""
         self.pin_active = not self.pin_active
         if self.pin_active:
-            instance.background_color = (0.15, 0.15, 0.25, 1)  # Темнее при активности
-            instance.text = "Pin"  # Оставляем текст "Pin" всегда
+            instance.background_color = (0.15, 0.15, 0.25, 1)
+            instance.text = "Pin"
         else:
-            instance.background_color = (0.25, 0.25, 0.35, 1)  # Обычный цвет
+            instance.background_color = (0.25, 0.25, 0.35, 1)
             instance.text = "Pin"
 
         for btn in self.buttons:
@@ -1328,7 +1211,6 @@ Debug Info:
                     btn.collapse()
 
     def filter_buttons(self, *args):
-        """Фильтрует кнопки по поисковому запросу"""
         value = self.search_input.text.lower()
         for btn_widget in self.buttons:
             visible = value in btn_widget.btn_text.lower()
@@ -1337,7 +1219,6 @@ Debug Info:
             btn_widget.height = 150 if visible else 0
 
     def show_error_popup(self, message):
-        """Показывает popup с ошибкой"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Label(text=message))
         close_btn = Button(text="OK", size_hint_y=None, height=50)
@@ -1348,7 +1229,6 @@ Debug Info:
         popup.open()
 
     def show_info_popup(self, title, message):
-        """Показывает информационный popup"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         content.add_widget(Label(text=message))
         close_btn = Button(text="OK", size_hint_y=None, height=50)
@@ -1359,7 +1239,6 @@ Debug Info:
         popup.open()
 
     def check_for_update(self):
-        """Проверяет обновления"""
         try:
             print("Checking for updates...")
             response = requests.get(self.UPDATE_URL, timeout=10)
@@ -1380,7 +1259,6 @@ Debug Info:
             print(f"Update check error: {e}")
 
     def show_update_popup(self, latest_version, download_url, changelog):
-        """Показывает popup с информацией об обновлении"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
         update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
