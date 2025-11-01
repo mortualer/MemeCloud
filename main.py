@@ -642,7 +642,7 @@ class MyApp(App):
                         filename = cursor.getString(display_name_index)
                 finally:
                     cursor.close()
-            
+
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                 print(f"Skipping non-audio file: {filename}")
                 return None
@@ -659,15 +659,16 @@ class MyApp(App):
                     counter += 1
             
             input_stream = content_resolver.openInputStream(uri)
-            with open(new_path, 'wb') as out_file:
-                buffer_size = 8192
-                buffer = bytearray(buffer_size)
-                bytes_read = input_stream.read(buffer)
-                while bytes_read != -1:
-                    out_file.write(buffer[:bytes_read])
+            try:
+                with open(new_path, 'wb') as out_file:
+                    buffer_size = 8192
+                    buffer = bytearray(buffer_size)
                     bytes_read = input_stream.read(buffer)
-            
-            input_stream.close()
+                    while bytes_read != -1:
+                        out_file.write(buffer[:bytes_read])
+                        bytes_read = input_stream.read(buffer)
+            finally:
+                input_stream.close()
             
             print(f"Successfully copied to: {new_path}")
             return filename
@@ -975,46 +976,37 @@ class MyApp(App):
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """ИСПРАВЛЕННЫЙ метод для открытия файлового пикера на Android"""
+        """ПЕРЕПИСАННЫЙ метод для открытия файлового пикера на Android"""
         try:
             from jnius import autoclass
             from android import activity
             
+            # Получаем необходимые Java классы
             Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            
+            # Получаем текущий контекст активности
             context = PythonActivity.mActivity
             
             # Создаем Intent для выбора файлов
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent = Intent()
+            intent.setAction(Intent.ACTION_GET_CONTENT)
+            intent.setType("audio/*")
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             
-            # Устанавливаем MIME типы для аудио файлов
-            intent.setType("audio/*")
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, [
-                "audio/mpeg",
-                "audio/mp3", 
-                "audio/wav",
-                "audio/x-wav",
-                "audio/ogg",
-                "audio/x-ogg"
-            ])
-            
-            # Разрешаем множественный выбор
+            # Добавляем возможность множественного выбора
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
             
-            # Создаем chooser
-            chooser_title = "Select Audio Files"
-            chooser = Intent.createChooser(intent, chooser_title)
+            # Создаем chooser с понятным заголовком
+            chooser = Intent.createChooser(intent, "Select audio files")
             
-            # Регистрируем обработчик результата
-            def on_activity_result(request_code, result_code, intent):
-                print(f"File picker result: {request_code}, {result_code}")
+            # Создаем обработчик результата
+            def on_activity_result(request_code, result_code, data):
                 if request_code == 123:
-                    self.on_activity_result(request_code, result_code, intent)
-                    # Отвязываем обработчик после использования
-                    activity.unbind(on_activity_result=on_activity_result)
+                    print(f"File picker result: {request_code}, {result_code}")
+                    self.on_activity_result(request_code, result_code, data)
             
+            # Регистрируем обработчик
             activity.bind(on_activity_result=on_activity_result)
             
             # Запускаем активность
@@ -1023,6 +1015,8 @@ class MyApp(App):
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
+            import traceback
+            traceback.print_exc()
             self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
     def open_desktop_file_picker(self):
