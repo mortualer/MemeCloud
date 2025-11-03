@@ -861,7 +861,7 @@ class MyApp(App):
 
     def open_file_picker(self):
         if platform == 'android':
-            self.open_android_file_picker_simple()
+            self.open_android_file_picker()
         else:
             self.open_desktop_file_picker()
 
@@ -871,111 +871,129 @@ class MyApp(App):
         else:
             self.open_desktop_folder_picker()
 
-    def open_android_file_picker_simple(self):
-        """УПРОЩЕННЫЙ метод для Android - избегаем сложных JNI операций"""
+    def open_android_file_picker(self):
+        """ИСПРАВЛЕННЫЙ метод для открытия файлового пикера на Android"""
         try:
             from jnius import autoclass
             from android import activity
             
-            # Минимальный набор классов
+            # Получаем необходимые классы
             Intent = autoclass('android.content.Intent')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             
+            # Получаем текущий контекст активности
             context = PythonActivity.mActivity
             
-            # Простейший Intent
+            # Создаем Intent для выбора файлов
             intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.setType("audio/*")
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             
-            # Создаем chooser
+            # Разрешаем множественный выбор
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
+            
+            # Создаем chooser с понятным заголовком
             chooser = Intent.createChooser(intent, "Select audio files")
             
-            # Простой обработчик
-            def on_activity_result(request_code, result_code, intent):
+            # Создаем обработчик результата
+            def on_activity_result(request_code, result_code, data):
+                print(f"File picker result: {request_code}, {result_code}")
                 if request_code == 123:
-                    print(f"File picker result: {request_code}, {result_code}")
-                    if result_code == -1:  # RESULT_OK
-                        self.process_selected_files(intent)
-                    else:
-                        print("User cancelled file selection")
+                    # Обрабатываем результат
+                    self.handle_activity_result(request_code, result_code, data)
             
+            # Регистрируем обработчик
             activity.bind(on_activity_result=on_activity_result)
+            
+            # Запускаем активность
             context.startActivityForResult(chooser, 123)
-            print("Simple Android file picker started")
+            print("Android file picker started successfully")
             
         except Exception as e:
-            print(f"Simple file picker error: {e}")
+            print(f"Error opening Android file picker: {e}")
             import traceback
             traceback.print_exc()
-            self.show_error_popup("Cannot open file picker")
+            self.show_error_popup(f"Cannot open file picker: {str(e)}")
 
-    def process_selected_files(self, intent):
-        """Обрабатывает выбранные файлы без сложных JNI операций"""
+    def handle_activity_result(self, request_code, result_code, data):
+        """Обрабатывает результат выбора файлов"""
+        if request_code != 123:
+            return
+            
         try:
-            from jnius import autoclass
-            
-            Uri = autoclass('android.net.Uri')
-            ClipData = autoclass('android.content.ClipData')
-            
-            processed_files = []
-            
-            # Проверяем множественный выбор
-            clip_data = intent.getClipData()
-            if clip_data is not None:
-                count = clip_data.getItemCount()
-                print(f"Multiple files selected: {count}")
-                for i in range(count):
-                    uri = clip_data.getItemAt(i).getUri()
-                    filename = self.copy_android_file_simple(uri)
-                    if filename:
-                        processed_files.append(filename)
+            if result_code == -1:  # RESULT_OK
+                from jnius import autoclass
+                
+                Uri = autoclass('android.net.Uri')
+                ClipData = autoclass('android.content.ClipData')
+                
+                processed_files = []
+                
+                # Проверяем множественный выбор
+                clip_data = data.getClipData()
+                if clip_data is not None:
+                    count = clip_data.getItemCount()
+                    print(f"Multiple files selected: {count}")
+                    for i in range(count):
+                        uri = clip_data.getItemAt(i).getUri()
+                        result = self.process_android_uri(uri)
+                        if result:
+                            processed_files.append(result)
+                else:
+                    # Одиночный выбор
+                    uri = data.getData()
+                    if uri is not None:
+                        result = self.process_android_uri(uri)
+                        if result:
+                            processed_files.append(result)
+                
+                print(f"File processing completed. Processed {len(processed_files)} files")
+                
+                if processed_files:
+                    Clock.schedule_once(lambda dt: self.delayed_load_sounds(), 0.1)
+                    self.show_info_popup("Success", f"Added {len(processed_files)} audio files")
+                
             else:
-                # Одиночный выбор
-                uri = intent.getData()
-                if uri is not None:
-                    filename = self.copy_android_file_simple(uri)
-                    if filename:
-                        processed_files.append(filename)
-            
-            print(f"Processed {len(processed_files)} files")
-            
-            if processed_files:
-                Clock.schedule_once(lambda dt: self.delayed_load_sounds(), 0.1)
-                self.show_info_popup("Success", f"Added {len(processed_files)} audio files")
-            
+                print("User cancelled file selection")
+                
         except Exception as e:
-            print(f"Error processing selected files: {e}")
-            self.show_error_popup("Error processing files")
+            print(f"Error processing activity result: {e}")
+            self.show_error_popup(f"Error processing selected files: {str(e)}")
 
-    def copy_android_file_simple(self, uri):
-        """Копирует файл с URI используя простой подход"""
+    def process_android_uri(self, uri):
+        """Обрабатывает URI файла на Android"""
         try:
             from jnius import autoclass
             
+            Context = autoclass('android.content.Context')
+            ContentResolver = autoclass('android.content.ContentResolver')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # Получаем имя файла из URI
-            cursor = context.getContentResolver().query(uri, None, None, None, None)
+            content_resolver = context.getContentResolver()
+            
+            # Получаем имя файла
+            cursor = content_resolver.query(uri, None, None, None, None)
             filename = "audio_file"
             if cursor:
                 try:
-                    name_index = cursor.getColumnIndex("_display_name")
-                    if name_index != -1 and cursor.moveToFirst():
-                        filename = cursor.getString(name_index)
+                    display_name_index = cursor.getColumnIndex("_display_name")
+                    if display_name_index != -1 and cursor.moveToFirst():
+                        filename = cursor.getString(display_name_index)
                 finally:
                     cursor.close()
-            
-            # Проверяем расширение
+
+            # Проверяем расширение файла
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
                 print(f"Skipping non-audio file: {filename}")
                 return None
             
-            print(f"Copying: {filename}")
+            print(f"Processing audio file: {filename}")
             
-            # Создаем путь назначения
+            # Создаем путь для сохранения
             new_path = os.path.join(self.save_dir, filename)
+            
+            # Если файл с таким именем уже существует, добавляем номер
             if os.path.exists(new_path):
                 base, ext = os.path.splitext(filename)
                 counter = 1
@@ -983,11 +1001,13 @@ class MyApp(App):
                     new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                     counter += 1
             
-            # Копируем файл
-            input_stream = context.getContentResolver().openInputStream(uri)
+            # Копируем содержимое файла
+            input_stream = content_resolver.openInputStream(uri)
             try:
                 with open(new_path, 'wb') as out_file:
-                    buffer = bytearray(8192)
+                    # Читаем и записываем файл по частям
+                    buffer_size = 8192
+                    buffer = bytearray(buffer_size)
                     bytes_read = input_stream.read(buffer)
                     while bytes_read != -1:
                         out_file.write(buffer[:bytes_read])
@@ -995,11 +1015,12 @@ class MyApp(App):
             finally:
                 input_stream.close()
             
-            print(f"Successfully copied: {new_path}")
+            print(f"Successfully copied to: {new_path}")
             return filename
-            
+                
         except Exception as e:
-            print(f"Error copying file: {e}")
+            print(f"Error processing Android URI: {e}")
+            self.show_error_popup(f"Error processing file: {str(e)}")
             return None
 
     def open_desktop_file_picker(self):
