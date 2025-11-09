@@ -399,7 +399,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.0"
+    CURRENT_VERSION = "1.2.5"  # ИЗМЕНЕНО: версия 1.2.5 вместо 1.2.0
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
