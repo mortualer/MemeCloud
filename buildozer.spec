@@ -11,10 +11,11 @@ orientation = portrait
 fullscreen = 0
 
 # Иконки
-icon.filename = ic_launcher.png
+icon.filename = %(source.dir)s/ic_launcher.png
 android.adaptive_icon = android/res/mipmap-anydpi-v26/ic_launcher.xml
-#android.adaptive_icon.background = android/res/mipmap-anydpi-v26/ic_launcher_background.png
-#android.adaptive_icon.monochrome = android/res/mipmap-anydpi-v26/ic_launcher_monochrome.png
+android.adaptive_icon.foreground = android/res/mipmap-anydpi-v26/ic_launcher_foreground.png
+android.adaptive_icon.background = android/res/mipmap-anydpi-v26/ic_launcher_background.png
+android.adaptive_icon.monochrome = android/res/mipmap-anydpi-v26/ic_launcher_monochrome.png
 
 # Splash
 #presplash.filename = android/res/mipmap-hdpi/ic_launcher.png
@@ -24,7 +25,7 @@ log_level = 2
 android.add_resource = saved_sounds, android/res
 
 # Android настройки
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES
+android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO,READ_MEDIA_IMAGES
 android.api = 33
 android.minapi = 21
 android.sdk = 24
