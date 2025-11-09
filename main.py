@@ -399,7 +399,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.5"
+    CURRENT_VERSION = "1.2.0"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
@@ -444,6 +444,10 @@ class MyApp(App):
             # Загружаем звуки
             Clock.schedule_once(self.delayed_load_sounds, 0.5)
             
+            # Запрашиваем разрешения на Android
+            if platform == 'android':
+                Clock.schedule_once(self.request_android_permissions, 1)
+                
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
@@ -538,10 +542,6 @@ class MyApp(App):
         print("App started successfully")
         # Копируем встроенные звуки
         self.copy_builtin_sounds()
-        
-        # Запрашиваем разрешения сразу при старте
-        if platform == 'android':
-            Clock.schedule_once(self.request_android_permissions, 0)
 
     def copy_builtin_sounds(self):
         """Копирует встроенные звуки в рабочую директорию"""
@@ -601,61 +601,30 @@ class MyApp(App):
             print(f"Error copying built-in sounds: {e}")
 
     def request_android_permissions(self, dt=None):
-        """Запрашивает разрешения на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Запрашивает разрешения на Android"""
         if platform == 'android':
             try:
-                from android.permissions import request_permissions, check_permission, Permission
-                
                 print("Requesting Android permissions...")
                 
-                # Определяем необходимые разрешения в зависимости от версии Android
+                # Базовые разрешения
+                permissions = [
+                    Permission.READ_EXTERNAL_STORAGE,
+                    Permission.WRITE_EXTERNAL_STORAGE,
+                    Permission.INTERNET
+                ]
+                
+                # Для Android 13+
                 if hasattr(Permission, 'READ_MEDIA_AUDIO'):
-                    # Android 13+ - новые разрешения
-                    permissions = [Permission.READ_MEDIA_AUDIO]
-                    print("Requesting READ_MEDIA_AUDIO permission for Android 13+")
-                else:
-                    # Android до 13 - старые разрешения
-                    permissions = [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
-                    print("Requesting storage permissions for Android <13")
+                    permissions = [
+                        Permission.READ_MEDIA_AUDIO,
+                        Permission.INTERNET
+                    ]
                 
-                # Всегда добавляем INTERNET
-                permissions.append(Permission.INTERNET)
-                
-                print(f"Final permissions to request: {permissions}")
-                
-                # Проверяем, есть ли уже разрешения
-                all_granted = True
-                for perm in permissions:
-                    if not check_permission(perm):
-                        all_granted = False
-                        break
-                
-                if all_granted:
-                    print("All permissions already granted")
-                    self.permissions_granted = True
-                    return
-                
-                # Запрашиваем недостающие разрешения
-                def permission_callback(permissions, grant_results):
-                    print(f"Permission callback received: {permissions}, {grant_results}")
-                    if all(grant_results):
-                        print("All permissions granted!")
-                        self.permissions_granted = True
-                        # Показываем уведомление о успешном предоставлении разрешений
-                        Clock.schedule_once(lambda dt: self.show_info_popup("Success", "Permissions granted! You can now add audio files."), 0.5)
-                    else:
-                        print("Some permissions were denied")
-                        self.permissions_granted = False
-                        # Показываем предупреждение
-                        Clock.schedule_once(lambda dt: self.show_info_popup("Warning", "Some permissions were denied. You may not be able to add audio files."), 0.5)
-                
-                print("Calling request_permissions...")
-                request_permissions(permissions, permission_callback)
+                print(f"Requesting permissions: {permissions}")
+                request_permissions(permissions, self.permission_callback)
                 
             except Exception as e:
-                print(f"Error in request_android_permissions: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"Permission request error: {e}")
 
     def permission_callback(self, permissions, grant_results):
         """Обратный вызов после запроса разрешений"""
@@ -968,26 +937,26 @@ class MyApp(App):
             self.show_error_popup("Error deleting sound")
 
     def show_upload_options(self, instance):
-        """Показывает опции загрузки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-        content = BoxLayout(orientation='vertical', spacing=15, padding=20)
+        """Показывает опции загрузки"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
         title_label = Label(
             text="How do you want to add sounds?",
             size_hint_y=None,
             height=50,
-            font_size='18sp',
-            color=(1, 1, 1, 1)
+            font_size='18sp'
         )
         content.add_widget(title_label)
         
-        # Горизонтальный layout для кнопок выбора
-        select_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
+        # Горизонтальный layout для кнопок - ИЗМЕНЕНО: кнопки слева и справа
+        btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
         
-        # Кнопка выбора файлов - голубовато-фиолетовая
+        # Кнопка выбора файлов - с закругленными краями
         file_btn = Button(
             text="Select Audio\nFiles",
-            size_hint=(1, 1),
-            background_color=(0.3, 0.6, 0.9, 1),  # Голубовато-фиолетовый
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
+            height=80,
+            background_color=(0.3, 0.6, 0.9, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='16sp',
@@ -996,11 +965,12 @@ class MyApp(App):
         )
         file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
         
-        # Кнопка выбора папки (только для desktop) - зеленоватая
+        # Кнопка выбора папки (только для desktop)
         folder_btn = Button(
             text="Select\nFolder",
-            size_hint=(1, 1),
-            background_color=(0.4, 0.7, 0.4, 1),  # Зеленоватый
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
+            height=80,
+            background_color=(0.4, 0.7, 0.4, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='16sp',
@@ -1009,59 +979,55 @@ class MyApp(App):
         )
         folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         
-        # Добавляем кнопки в зависимости от платформы
+        btn_layout.add_widget(file_btn)
+        
+        # Для Android не показываем кнопку выбора папки
         if platform != 'android':
-            select_layout.add_widget(file_btn)
-            select_layout.add_widget(folder_btn)
+            btn_layout.add_widget(folder_btn)
         else:
-            # На Android только кнопка выбора файлов, но занимает всю ширину
-            select_layout.add_widget(file_btn)
+            # На Android добавляем пустую кнопку для выравнивания
+            empty_btn = Button(
+                size_hint=(0.5, None),
+                height=80,
+                background_color=(0, 0, 0, 0),
+                background_normal='',
+                disabled=True
+            )
+            btn_layout.add_widget(empty_btn)
         
-        content.add_widget(select_layout)
+        content.add_widget(btn_layout)
         
-        # Горизонтальный layout для кнопок Select и Cancel
-        action_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
+        # Кнопка Cancel - ИЗМЕНЕНО: размещаем отдельно
+        cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
         
-        # Кнопка Select - голубовато-фиолетовая (слева)
-        select_btn = Button(
-            text="SELECT",
-            size_hint=(0.5, 1),
-            background_color=(0.3, 0.6, 0.9, 1),  # Голубовато-фиолетовый
-            background_normal='',
-            color=(1, 1, 1, 1),
-            font_size='16sp'
-        )
-        select_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
+        # Добавляем пустое пространство слева
+        left_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(left_spacer)
         
-        # Кнопка Cancel - красная (справа)
         cancel_btn = Button(
-            text="CANCEL",
+            text="Cancel",
             size_hint=(0.5, 1),
-            background_color=(0.8, 0.3, 0.3, 1),  # Красный
-            background_normal='',
-            color=(1, 1, 1, 1),
-            font_size='16sp'
+            background_color=(0.8, 0.3, 0.3, 1),
+            background_normal=''
         )
+        cancel_layout.add_widget(cancel_btn)
         
-        action_layout.add_widget(select_btn)
-        action_layout.add_widget(cancel_btn)
-        content.add_widget(action_layout)
+        # Добавляем пустое пространство справа
+        right_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(right_spacer)
+        
+        content.add_widget(cancel_layout)
         
         popup = Popup(
             title="Add Sounds",
             content=content,
-            size_hint=(0.9, 0.7),
-            background='',
-            separator_color=(0.3, 0.3, 0.4, 1),
+            size_hint=(0.8, 0.6),
             auto_dismiss=False
         )
         
         cancel_btn.bind(on_release=popup.dismiss)
         
-        # Анимация появления
-        popup.content.opacity = 0
         popup.open()
-        Animation(opacity=1, duration=0.3).start(popup.content)
 
     def _file_picker_selected(self, popup):
         """Обработчик выбора файлового пикера"""
@@ -1089,37 +1055,49 @@ class MyApp(App):
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """Открывает файловый пикер на Android - УПРОЩЕННАЯ ВЕРСИЯ"""
-        if platform != 'android':
-            return
-            
+        """Открывает файловый пикер на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             from jnius import autoclass
             from android import activity
             
             Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # Создаем Intent для выбора файлов
+            # ИСПРАВЛЕНИЕ: Создаем Intent с явным указанием MIME типов для аудио
             intent = Intent(Intent.ACTION_GET_CONTENT)
-            intent.setType("audio/*")  # Только аудио файлы
+            
+            # Указываем конкретные MIME типы для аудио файлов
+            intent.setType("audio/*")
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, [
+                "audio/mpeg",      # MP3
+                "audio/mp3",       # MP3
+                "audio/wav",       # WAV
+                "audio/x-wav",     # WAV
+                "audio/ogg",       # OGG
+                "audio/x-ogg"      # OGG
+            ])
+            
             intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Разрешаем множественный выбор
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
             
-            # Создаем chooser
-            chooser = Intent.createChooser(intent, "Select audio files")
+            # Создаем chooser с явным заголовком
+            chooser_title = "Select audio files (MP3, WAV, OGG)"
+            chooser = Intent.createChooser(intent, chooser_title)
             
-            # Устанавливаем обработчик результата
+            # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
+                print(f"File picker result: {request_code}, {result_code}")
                 if request_code == 123:
                     self.on_activity_result(request_code, result_code, intent)
             
+            # Устанавливаем обработчик
             activity.bind(on_activity_result=on_activity_result)
             
-            # Запускаем
+            # Запускаем активность
             context.startActivityForResult(chooser, 123)
-            print("Android file picker started")
+            print("Android file picker started for audio files only")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
