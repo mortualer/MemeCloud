@@ -1,0 +1,8 @@
+{
+    "name": "MemeCloud",
+    "version": "1.2.5",
+    "icon": "ios/Icon.png",
+    "presplash": "ios/Presplash.png",
+    "prerendered_icon": true,
+    "ios_assets": "ios/"
+}
