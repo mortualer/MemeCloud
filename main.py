@@ -399,7 +399,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.5"  # ИЗМЕНЕНО: версия 1.2.5 вместо 1.2.0
+    CURRENT_VERSION = "1.2.5"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
@@ -444,10 +444,6 @@ class MyApp(App):
             # Загружаем звуки
             Clock.schedule_once(self.delayed_load_sounds, 0.5)
             
-            # Запрашиваем разрешения на Android
-            if platform == 'android':
-                Clock.schedule_once(self.request_android_permissions, 1)
-                
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
@@ -542,6 +538,10 @@ class MyApp(App):
         print("App started successfully")
         # Копируем встроенные звуки
         self.copy_builtin_sounds()
+        
+        # Запрашиваем разрешения сразу при старте
+        if platform == 'android':
+            Clock.schedule_once(self.request_android_permissions, 0)
 
     def copy_builtin_sounds(self):
         """Копирует встроенные звуки в рабочую директорию"""
