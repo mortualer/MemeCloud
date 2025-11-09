@@ -17,12 +17,12 @@ fullscreen = 0
 # Иконки
 icon.filename = %(source.dir)s/ic_launcher.png
 android.adaptive_icon = android/res/mipmap-anydpi-v26/ic_launcher.xml
-android.adaptive_icon.foreground = android/res/mipmap-anydpi-v26/ic_launcher_foreground.png
-android.adaptive_icon.background = android/res/mipmap-anydpi-v26/ic_launcher_background.png
-android.adaptive_icon.monochrome = android/res/mipmap-anydpi-v26/ic_launcher_monochrome.png
+android.adaptive_icon_foreground = %(source.dir)s/android/res/mipmap-anydpi-v26/ic_launcher_foreground.png
+android.adaptive_icon_background = %(source.dir)s/android/res/mipmap-anydpi-v26/ic_launcher_background.png
+android.adaptive_icon_monochrome = %(source.dir)s/android/res/mipmap-anydpi-v26/ic_launcher_monochrome.png
 
 # Splash
-#presplash.filename = android/res/mipmap-hdpi/ic_launcher.png
+presplash.filename = %(source.dir)s/android/res/mipmap-xxxdpi/ic_launcher.png
 
 [buildozer]
 log_level = 2
