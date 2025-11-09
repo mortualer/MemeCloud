@@ -7,9 +7,8 @@ source.include_exts = py,png,jpg,kv,atlas,ttf,json,mp3,wav,ogg
 #source.include_dirs = saved_sounds,android,ios,web,
 source.exclude_dirs = tests, bin
 
-source.include_patterns = saved_sounds/*
-source.include_patterns = android/*
-source.include_patterns = android/res/*
+source.include_patterns = saved_sounds/*, android/res/*
+
 version = 1.2.5
 requirements = python3,kivy,requests,openssl,android,androidstorage4kivy
 orientation = portrait
