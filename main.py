@@ -399,7 +399,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.0"
+    CURRENT_VERSION = "1.2.5"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
@@ -948,14 +948,13 @@ class MyApp(App):
         )
         content.add_widget(title_label)
         
-        # Горизонтальный layout для кнопок
+        # Горизонтальный layout для кнопок - ИЗМЕНЕНО: кнопки слева и справа
         btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
         
         # Кнопка выбора файлов - с закругленными краями
         file_btn = Button(
             text="Select Audio\nFiles",
-            size_hint=(None, None),
-            width=160,  # Соотношение 2:1 (160:80)
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
             height=80,
             background_color=(0.3, 0.6, 0.9, 1),
             background_normal='',
@@ -969,8 +968,7 @@ class MyApp(App):
         # Кнопка выбора папки (только для desktop)
         folder_btn = Button(
             text="Select\nFolder",
-            size_hint=(None, None),
-            width=160,  # Соотношение 2:1 (160:80)
+            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
             height=80,
             background_color=(0.4, 0.7, 0.4, 1),
             background_normal='',
@@ -986,17 +984,39 @@ class MyApp(App):
         # Для Android не показываем кнопку выбора папки
         if platform != 'android':
             btn_layout.add_widget(folder_btn)
+        else:
+            # На Android добавляем пустую кнопку для выравнивания
+            empty_btn = Button(
+                size_hint=(0.5, None),
+                height=80,
+                background_color=(0, 0, 0, 0),
+                background_normal='',
+                disabled=True
+            )
+            btn_layout.add_widget(empty_btn)
         
         content.add_widget(btn_layout)
         
+        # Кнопка Cancel - ИЗМЕНЕНО: размещаем отдельно
+        cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
+        
+        # Добавляем пустое пространство слева
+        left_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(left_spacer)
+        
         cancel_btn = Button(
             text="Cancel",
-            size_hint_y=None,
-            height=50,
+            size_hint=(0.5, 1),
             background_color=(0.8, 0.3, 0.3, 1),
             background_normal=''
         )
-        content.add_widget(cancel_btn)
+        cancel_layout.add_widget(cancel_btn)
+        
+        # Добавляем пустое пространство справа
+        right_spacer = BoxLayout(size_hint=(0.5, 1))
+        cancel_layout.add_widget(right_spacer)
+        
+        content.add_widget(cancel_layout)
         
         popup = Popup(
             title="Add Sounds",
@@ -1035,7 +1055,7 @@ class MyApp(App):
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """Открывает файловый пикер на Android"""
+        """Открывает файловый пикер на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             from jnius import autoclass
             from android import activity
@@ -1045,11 +1065,26 @@ class MyApp(App):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # Создаем Intent для выбора файла с поддержкой множественного выбора
+            # ИСПРАВЛЕНИЕ: Создаем Intent с явным указанием MIME типов для аудио
             intent = Intent(Intent.ACTION_GET_CONTENT)
+            
+            # Указываем конкретные MIME типы для аудио файлов
             intent.setType("audio/*")
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, [
+                "audio/mpeg",      # MP3
+                "audio/mp3",       # MP3
+                "audio/wav",       # WAV
+                "audio/x-wav",     # WAV
+                "audio/ogg",       # OGG
+                "audio/x-ogg"      # OGG
+            ])
+            
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
+            
+            # Создаем chooser с явным заголовком
+            chooser_title = "Select audio files (MP3, WAV, OGG)"
+            chooser = Intent.createChooser(intent, chooser_title)
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
@@ -1061,8 +1096,8 @@ class MyApp(App):
             activity.bind(on_activity_result=on_activity_result)
             
             # Запускаем активность
-            context.startActivityForResult(intent, 123)
-            print("Android file picker started")
+            context.startActivityForResult(chooser, 123)
+            print("Android file picker started for audio files only")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
@@ -1091,7 +1126,9 @@ class MyApp(App):
                 
                 if processed_count > 0:
                     self.show_info_popup("Success", f"Added {processed_count} audio files")
+                    # ИСПРАВЛЕНО: гарантируем сохранение файлов и обновление интерфейса
                     Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                    self.save_sound_settings()  # Сохраняем настройки
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
@@ -1117,11 +1154,12 @@ class MyApp(App):
             self.show_error_popup(f"Error selecting folder: {str(e)}")
 
     def copy_audio_file(self, file_path):
-        """Копирует аудио файл"""
+        """Копирует аудио файл - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             filename = os.path.basename(file_path)
             
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
+                print(f"Skipping non-audio file: {filename}")
                 return False
             
             new_path = os.path.join(self.save_dir, filename)
@@ -1131,21 +1169,25 @@ class MyApp(App):
                 base, ext = os.path.splitext(filename)
                 counter = 1
                 while os.path.exists(new_path):
-                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
+                    new_filename = f"{base}_{counter}{ext}"
+                    new_path = os.path.join(self.save_dir, new_filename)
                     counter += 1
             
             shutil.copy2(file_path, new_path)
             print(f"Copied to: {new_path}")
             
-            # Добавляем кнопку
-            return self.add_sound_button(new_path)
+            # Добавляем кнопку и сохраняем настройки
+            success = self.add_sound_button(new_path)
+            if success:
+                self.save_sound_settings()  # Сохраняем настройки после добавления
+            return success
                 
         except Exception as e:
             print(f"Error copying file: {e}")
             return False
 
     def copy_audio_from_folder(self, folder_path):
-        """Копирует все аудио файлы из папки"""
+        """Копирует все аудио файлы из папки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             audio_files = []
             for filename in os.listdir(folder_path):
@@ -1165,6 +1207,7 @@ class MyApp(App):
             if copied_count > 0:
                 self.show_info_popup("Complete", f"Added {copied_count} audio files")
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
+                self.save_sound_settings()  # Сохраняем настройки
             else:
                 self.show_info_popup("Error", "No files were added")
             
@@ -1176,6 +1219,7 @@ class MyApp(App):
         """Принудительно перезагружает все звуки из папки saved_sounds"""
         print("Force reloading sounds...")
         self.load_existing_sounds()
+        self.save_sound_settings()  # Сохраняем настройки после перезагрузки
 
     def open_settings(self, instance):
         """Открывает настройки"""
@@ -1287,7 +1331,7 @@ Debug Info:
         popup.open()
 
     def check_for_update(self):
-        """Проверяет обновления"""
+        """Проверяет обновления с правильным сравнением версий"""
         try:
             print("Checking for updates...")
             response = requests.get(self.UPDATE_URL, timeout=10)
@@ -1295,17 +1339,38 @@ Debug Info:
                 data = response.json()
                 latest_version = data.get('version', '')
                 
-                if latest_version and latest_version != self.CURRENT_VERSION:
+                if latest_version and self.is_newer_version(latest_version, self.CURRENT_VERSION):
                     print(f"Update available: {latest_version}")
                     download_url = data.get('download_url', '')
                     changelog = data.get('changelog', '')
                     self.show_update_popup(latest_version, download_url, changelog)
                 else:
-                    print("No updates available")
+                    print(f"No updates available. Current: {self.CURRENT_VERSION}, Latest: {latest_version}")
             else:
                 print(f"Update check failed: {response.status_code}")
         except Exception as e:
             print(f"Update check error: {e}")
+
+    def is_newer_version(self, latest, current):
+        """Сравнивает версии в формате семантического версионирования"""
+        try:
+            # Разбиваем версии на компоненты
+            latest_parts = [int(x) for x in latest.split('.')]
+            current_parts = [int(x) for x in current.split('.')]
+            
+            # Сравниваем по компонентам
+            for i in range(max(len(latest_parts), len(current_parts))):
+                latest_num = latest_parts[i] if i < len(latest_parts) else 0
+                current_num = current_parts[i] if i < len(current_parts) else 0
+                
+                if latest_num > current_num:
+                    return True
+                elif latest_num < current_num:
+                    return False
+            return False  # Версии равны
+        except (ValueError, AttributeError):
+            # Fallback: сравниваем как строки
+            return latest > current
 
     def show_update_popup(self, latest_version, download_url, changelog):
         """Показывает popup с информацией об обновлении"""
