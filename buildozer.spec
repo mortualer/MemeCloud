@@ -46,7 +46,7 @@ android.allow_backup = True
 android.release_artifact = True
 
 # ИСПРАВЛЕНО: убрали дублирование из intent_filters
-android.manifest_extra_application = android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+#android.manifest_application_arguments = --icon @mipmap/ic_launcher --roundIcon @mipmap/ic_launcher_round
 
 
 android.gradle_dependencies = com.android.tools.build:gradle:8.5.0
