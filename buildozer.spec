@@ -9,14 +9,14 @@ source.exclude_dirs = tests, bin, ios, web
 # ИСПРАВЛЕНО: убрали запятую в конце и добавили xml
 source.include_patterns = saved_sounds/*,android/res/*
 
-version = 1.2.5
+version = 1.3.0
 requirements = python3,kivy,requests,openssl,android,androidstorage4kivy
 orientation = portrait
 fullscreen = 0
 
-# Иконки - ИСПРАВЛЕНО
-icon.filename = ic_launcher.png
-# УБРАТЬ эту строку - она неправильная
+
+#icon.filename = ic_launcher.png
+
 # android.adaptive_icon = android/res/mipmap-anydpi-v26/ic_launcher.xml
 android.adaptive_icon_foreground = android/res/mipmap-anydpi-v26/ic_launcher_foreground.png
 android.adaptive_icon_background = android/res/mipmap-anydpi-v26/ic_launcher_background.png
@@ -46,8 +46,7 @@ android.allow_backup = True
 android.release_artifact = True
 
 # ИСПРАВЛЕНО: убрали дублирование из intent_filters
-android.manifest_extra_application = <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" />
-# УБРАТЬ эту строку - она неправильная
-# android.manifest.intent_filters = <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" />
+android.manifest_extra_application = android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"
+
 
 android.gradle_dependencies = com.android.tools.build:gradle:8.5.0
