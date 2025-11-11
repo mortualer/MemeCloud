@@ -55,6 +55,13 @@ jobs:
         run: |
           ls -R android/res/mipmap-anydpi-v26/
 
+      - name: 🔍 Check all icon files
+        run: |
+          echo "🔍 Checking all icon files..."
+          find android/res/ -name "*ic_launcher*" -type f | sort
+          echo "🔍 Checking XML files in anydpi-v26..."
+          find android/res/mipmap-anydpi-v26/ -name "*.xml" -type f
+
       - name: 🛠️ Complete Android SDK setup with Java 17
         run: |
           set -e
