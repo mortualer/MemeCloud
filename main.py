@@ -936,98 +936,113 @@ class MyApp(App):
             print(f"Error deleting sound: {e}")
             self.show_error_popup("Error deleting sound")
 
-    def show_upload_options(self, instance):
-        """Показывает опции загрузки"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
-        
-        title_label = Label(
-            text="How do you want to add sounds?",
-            size_hint_y=None,
-            height=50,
-            font_size='18sp'
-        )
-        content.add_widget(title_label)
-        
-        # Горизонтальный layout для кнопок - ИЗМЕНЕНО: кнопки слева и справа
-        btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
-        
-        # Кнопка выбора файлов - с закругленными краями
-        file_btn = Button(
-            text="Select Audio\nFiles",
-            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
+def show_upload_options(self, instance):
+    """Показывает опции загрузки"""
+    content = BoxLayout(orientation='vertical', spacing=10, padding=20)
+    
+    title_label = Label(
+        text="How do you want to add sounds?",
+        size_hint_y=None,
+        height=50,
+        font_size='18sp'
+    )
+    content.add_widget(title_label)
+    
+    # Горизонтальный layout для основных кнопок (Select Audio Files и, возможно, Select Folder)
+    btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
+    
+    # Кнопка выбора файлов - с закругленными краями и фиолетовым цветом
+    file_btn = Button(
+        text="Select Audio\nFiles",
+        size_hint=(0.5, None),
+        height=80,
+        background_color=(0.59, 0.21, 0.96, 1), # Фиолетовый цвет (RGB: ~150, 54, 245 -> ~0.59, 0.21, 0.96)
+        background_normal='',
+        color=(1, 1, 1, 1),
+        font_size='16sp',
+        halign='center',
+        valign='middle'
+    )
+    file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
+    
+    # Кнопка выбора папки (только для desktop)
+    folder_btn = Button(
+        text="Select\nFolder",
+        size_hint=(0.5, None),
+        height=80,
+        background_color=(0.4, 0.7, 0.4, 1), # Зелёный цвет
+        background_normal='',
+        color=(1, 1, 1, 1),
+        font_size='16sp',
+        halign='center',
+        valign='middle'
+    )
+    folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
+    
+    btn_layout.add_widget(file_btn)
+    
+    # Для Android не показываем кнопку выбора папки
+    if platform != 'android':
+        btn_layout.add_widget(folder_btn)
+    else:
+        # На Android добавляем пустую кнопку для выравнивания
+        empty_btn = Button(
+            size_hint=(0.5, None),
             height=80,
-            background_color=(0.3, 0.6, 0.9, 1),
+            background_color=(0, 0, 0, 0),
             background_normal='',
-            color=(1, 1, 1, 1),
-            font_size='16sp',
-            halign='center',
-            valign='middle'
+            disabled=True
         )
-        file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
-        
-        # Кнопка выбора папки (только для desktop)
-        folder_btn = Button(
-            text="Select\nFolder",
-            size_hint=(0.5, None),  # ИЗМЕНЕНО: занимает половину ширины
-            height=80,
-            background_color=(0.4, 0.7, 0.4, 1),
-            background_normal='',
-            color=(1, 1, 1, 1),
-            font_size='16sp',
-            halign='center',
-            valign='middle'
-        )
-        folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
-        
-        btn_layout.add_widget(file_btn)
-        
-        # Для Android не показываем кнопку выбора папки
-        if platform != 'android':
-            btn_layout.add_widget(folder_btn)
-        else:
-            # На Android добавляем пустую кнопку для выравнивания
-            empty_btn = Button(
-                size_hint=(0.5, None),
-                height=80,
-                background_color=(0, 0, 0, 0),
-                background_normal='',
-                disabled=True
-            )
-            btn_layout.add_widget(empty_btn)
-        
-        content.add_widget(btn_layout)
-        
-        # Кнопка Cancel - ИЗМЕНЕНО: размещаем отдельно
-        cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
-        
-        # Добавляем пустое пространство слева
-        left_spacer = BoxLayout(size_hint=(0.5, 1))
-        cancel_layout.add_widget(left_spacer)
-        
-        cancel_btn = Button(
-            text="Cancel",
-            size_hint=(0.5, 1),
-            background_color=(0.8, 0.3, 0.3, 1),
-            background_normal=''
-        )
-        cancel_layout.add_widget(cancel_btn)
-        
-        # Добавляем пустое пространство справа
-        right_spacer = BoxLayout(size_hint=(0.5, 1))
-        cancel_layout.add_widget(right_spacer)
-        
-        content.add_widget(cancel_layout)
-        
-        popup = Popup(
-            title="Add Sounds",
-            content=content,
-            size_hint=(0.8, 0.6),
-            auto_dismiss=False
-        )
-        
-        cancel_btn.bind(on_release=popup.dismiss)
-        
-        popup.open()
+        btn_layout.add_widget(empty_btn)
+    
+    content.add_widget(btn_layout)
+
+    # --- НОВЫЙ БЛОК: Кнопки Select и Cancel рядом ---
+    # Горизонтальный layout для кнопок Select и Cancel
+    select_cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
+
+    # Кнопка Cancel (слева)
+    cancel_btn = Button(
+        text="Cancel",
+        size_hint=(0.5, 1),
+        background_color=(0.5, 0.5, 0.5, 1), # Серый цвет (немного темнее фона)
+        background_normal='',
+        color=(1, 1, 1, 1), # Белый текст
+        font_size='14sp'
+    )
+
+    # Кнопка Select (справа, заменяет кнопку "Select Audio Files")
+    # Мы создаём её здесь, чтобы она была рядом с Cancel.
+    # Обратите внимание: функционал привязки к выбору файлов останется у file_btn выше.
+    # Если вы хотите, чтобы "Select" делал то же, что и "Select Audio Files", используйте ту же привязку.
+    select_btn = Button(
+        text="Select", # Изменённый текст
+        size_hint=(0.5, 1),
+        background_color=(0.41, 0.15, 0.71, 1), # Более тёмный фиолетовый (RGB: ~105, 39, 181 -> ~0.41, 0.15, 0.71)
+        background_normal='',
+        color=(1, 1, 1, 1), # Белый текст
+        font_size='14sp'
+    )
+    # Привязываем ту же функцию, что и у file_btn, или другую, если нужно
+    select_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
+
+    # Добавляем кнопки в правильном порядке: Cancel, Select
+    select_cancel_layout.add_widget(cancel_btn)
+    select_cancel_layout.add_widget(select_btn)
+
+    content.add_widget(select_cancel_layout)
+    # --- Конец нового блока ---
+
+    popup = Popup(
+        title="Add Sounds",
+        content=content,
+        size_hint=(0.8, 0.6),
+        auto_dismiss=False
+    )
+    
+    cancel_btn.bind(on_release=popup.dismiss)
+    
+    popup.open()
 
     def _file_picker_selected(self, popup):
         """Обработчик выбора файлового пикера"""
