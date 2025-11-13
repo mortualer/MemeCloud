@@ -9,8 +9,8 @@ source.exclude_dirs = tests, bin, ios, web
 # ИСПРАВЛЕНО: убрали запятую в конце и добавили xml
 source.include_patterns = saved_sounds/*,android/res/*
 
-version = 1.2.5
-android.version_code = 10205
+version = 1.3.0
+android.version_code = 10300
 requirements = python3,kivy,requests,openssl,android,androidstorage4kivy
 orientation = portrait
 fullscreen = 0
