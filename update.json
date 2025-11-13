@@ -1,5 +1,6 @@
 {
-  "version": "1.3.0",
-  "download_url": "https://github.com/mortualer/MemeCloud/releases/tag/v1.2.5",
-  "changelog": "Improved sound loading and performance, modified Select and cancel buttons structure, added new sounds, enhanced user interface, new sounds, improved android file picker"
+    "version": "1.3.0",
+    "download_url": "https://github.com/mortualer/MemeCloud/releases/download/v1.3.0/memecloud-1.3.0-universal-release.apk",
+    "changelog": "• Added URL download feature\\n• New upload options\\n• Real-time download progress\\n• Enhanced error handling",
+    "critical": false
 }
