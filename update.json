@@ -1,5 +1,5 @@
 {
-  "version": "1.2.5",
+  "version": "1.3.0",
   "download_url": "https://github.com/mortualer/MemeCloud/releases/tag/v1.2.5",
-  "changelog": "Improved sound loading and performance, enhanced user interface, new sounds, improved android file picker"
+  "changelog": "Improved sound loading and performance, modified Select and cancel buttons structure, added new sounds, enhanced user interface, new sounds, improved android file picker"
 }
