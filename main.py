@@ -963,6 +963,7 @@ def show_upload_options(self, instance):
         halign='center',
         valign='middle'
     )
+    # Попробуйте привязать _file_picker_selected с передачей self
     file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
     
     # Кнопка выбора папки (только для desktop)
@@ -1010,6 +1011,8 @@ def show_upload_options(self, instance):
         color=(1, 1, 1, 1), # Белый текст
         font_size='14sp'
     )
+    # --- ИСПРАВЛЕНО: Привязываем к lambda, вызывающему update_table ---
+    cancel_btn.bind(on_release=lambda x: (popup.dismiss(), self.update_table()))
 
     # Кнопка Select (справа, заменяет кнопку "Select Audio Files")
     # Мы создаём её здесь, чтобы она была рядом с Cancel.
@@ -1040,7 +1043,7 @@ def show_upload_options(self, instance):
         auto_dismiss=False
     )
     
-    cancel_btn.bind(on_release=popup.dismiss)
+    # УБРАНО: popup.dismiss не вызывает update_table напрямую
     
     popup.open()
 
