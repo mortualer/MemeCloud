@@ -17,11 +17,235 @@ import webbrowser
 import json
 import shutil
 from kivy.utils import platform
+from urllib.parse import urlparse
 
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
     from android.storage import app_storage_path
     from jnius import autoclass, cast
+
+# -------------------------
+# URL Download Popup Class
+# -------------------------
+class URLDownloadPopup(Popup):
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.title = "Download from URL"
+        self.size_hint = (0.9, 0.6)
+        self.auto_dismiss = False
+        self.background = ''
+
+        # Основной контейнер
+        content = BoxLayout(orientation='vertical', spacing=15, padding=20)
+
+        # Заголовок
+        title_label = Label(
+            text="Enter audio file URL",
+            size_hint_y=None,
+            height=40,
+            font_size='20sp',
+            color=(1, 1, 1, 1)
+        )
+        content.add_widget(title_label)
+
+        # Поле ввода URL
+        self.url_input = TextInput(
+            hint_text="https://example.com/audio.mp3",
+            multiline=False,
+            size_hint_y=None,
+            height=60,
+            background_color=(0.9, 0.9, 0.95, 1),
+            foreground_color=(0, 0, 0, 1),
+            hint_text_color=(0.5, 0.5, 0.5, 0.7),
+            padding=[15, 10]
+        )
+        content.add_widget(self.url_input)
+
+        # Поле для имени файла
+        filename_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=60, spacing=10)
+        filename_layout.add_widget(Label(
+            text="Filename:", 
+            size_hint_x=0.4,
+            color=(1, 1, 1, 1)
+        ))
+        
+        self.filename_input = TextInput(
+            hint_text="custom_name.mp3",
+            multiline=False,
+            size_hint_x=0.6,
+            background_color=(0.9, 0.9, 0.95, 1),
+            foreground_color=(0, 0, 0, 1),
+            hint_text_color=(0.5, 0.5, 0.5, 0.7),
+            padding=[10, 10]
+        )
+        filename_layout.add_widget(self.filename_input)
+        content.add_widget(filename_layout)
+
+        # Статус загрузки
+        self.status_label = Label(
+            text="",
+            size_hint_y=None,
+            height=40,
+            font_size='14sp',
+            color=(1, 1, 1, 0.8)
+        )
+        content.add_widget(self.status_label)
+
+        # Кнопки
+        btn_layout = BoxLayout(size_hint_y=None, height=60, spacing=15)
+        
+        download_btn = Button(
+            text="DOWNLOAD",
+            background_color=(0.3, 0.6, 0.3, 1),
+            background_normal='',
+            color=(1, 1, 1, 1)
+        )
+        download_btn.bind(on_press=self.start_download)
+        
+        cancel_btn = Button(
+            text="CANCEL",
+            background_color=(0.8, 0.3, 0.3, 1),
+            background_normal='',
+            color=(1, 1, 1, 1)
+        )
+        cancel_btn.bind(on_press=self.dismiss)
+
+        btn_layout.add_widget(download_btn)
+        btn_layout.add_widget(cancel_btn)
+        content.add_widget(btn_layout)
+
+        self.content = content
+        
+        # Привязываем события
+        self.url_input.bind(text=self.on_url_change)
+
+    def on_url_change(self, instance, value):
+        """Автоматически извлекаем имя файла из URL"""
+        if value and not self.filename_input.text:
+            try:
+                # Пытаемся извлечь имя файла из URL
+                parsed = urlparse(value)
+                filename = os.path.basename(parsed.path)
+                if filename and '.' in filename:
+                    self.filename_input.text = filename
+            except:
+                pass
+
+    def start_download(self, instance):
+        """Начинает загрузку файла"""
+        url = self.url_input.text.strip()
+        filename = self.filename_input.text.strip()
+
+        if not url:
+            self.status_label.text = "Please enter URL"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+            return
+
+        if not filename:
+            self.status_label.text = "Please enter filename"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+            return
+
+        # Проверяем расширение файла
+        valid_extensions = ('.mp3', '.wav', '.ogg')
+        if not filename.lower().endswith(valid_extensions):
+            self.status_label.text = "File must be .mp3, .wav or .ogg"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+            return
+
+        # Меняем состояние кнопки
+        instance.text = "DOWNLOADING..."
+        instance.background_color = (0.5, 0.5, 0.5, 1)
+        instance.disabled = True
+
+        self.status_label.text = "Starting download..."
+        self.status_label.color = (1, 1, 0.8, 1)
+
+        # Запускаем загрузку в отдельном потоке
+        Clock.schedule_once(lambda dt: self.download_file(url, filename, instance), 0.1)
+
+    def download_file(self, url, filename, button):
+        """Загружает файл по URL"""
+        try:
+            self.status_label.text = "Connecting..."
+            
+            # Создаем полный путь для сохранения
+            filepath = os.path.join(self.app.save_dir, filename)
+            
+            # Если файл существует, добавляем номер
+            if os.path.exists(filepath):
+                base, ext = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(filepath):
+                    filepath = os.path.join(self.app.save_dir, f"{base}_{counter}{ext}")
+                    counter += 1
+                filename = os.path.basename(filepath)
+
+            # Загружаем файл
+            response = requests.get(url, stream=True, timeout=30)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            
+            self.status_label.text = f"Downloading: 0%"
+            
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        if total_size > 0:
+                            percent = (downloaded_size / total_size) * 100
+                            self.status_label.text = f"Downloading: {percent:.1f}%"
+                        else:
+                            self.status_label.text = f"Downloaded: {downloaded_size // 1024}KB"
+            
+            self.status_label.text = "Download completed!"
+            self.status_label.color = (0.6, 1, 0.6, 1)
+            
+            # Добавляем звук в приложение
+            success = self.app.add_sound_button(filepath)
+            
+            if success:
+                self.status_label.text = "File added successfully!"
+                
+                # Закрываем попап через 1 секунду
+                Clock.schedule_once(lambda dt: self.dismiss(), 1.0)
+            else:
+                self.status_label.text = "Error adding file"
+                self.status_label.color = (1, 0.5, 0.5, 1)
+                # Удаляем файл если не удалось добавить
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
+                
+                # Восстанавливаем кнопку
+                button.text = "DOWNLOAD"
+                button.background_color = (0.3, 0.6, 0.3, 1)
+                button.disabled = False
+
+        except requests.exceptions.Timeout:
+            self.status_label.text = "Download timeout"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+        except requests.exceptions.ConnectionError:
+            self.status_label.text = "Connection error"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+        except requests.exceptions.RequestException as e:
+            self.status_label.text = f"Download error: {str(e)}"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+        except Exception as e:
+            self.status_label.text = f"Error: {str(e)}"
+            self.status_label.color = (1, 0.5, 0.5, 1)
+        
+        # Восстанавливаем кнопку в случае ошибки
+        if self.status_label.color == (1, 0.5, 0.5, 1):
+            button.text = "DOWNLOAD"
+            button.background_color = (0.3, 0.6, 0.3, 1)
+            button.disabled = False
 
 # -------------------------
 # SoundButton Class
@@ -399,7 +623,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.2.5"
+    CURRENT_VERSION = "1.3.0"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
@@ -936,7 +1160,7 @@ class MyApp(App):
             print(f"Error deleting sound: {e}")
             self.show_error_popup("Error deleting sound")
 
-def show_upload_options(self, instance):
+    def show_upload_options(self, instance):
         """Показывает опции загрузки"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
@@ -944,91 +1168,80 @@ def show_upload_options(self, instance):
             text="How do you want to add sounds?",
             size_hint_y=None,
             height=50,
-            font_size='18sp'
+            font_size='18sp',
+            color=(1, 1, 1, 1)
         )
         content.add_widget(title_label)
         
-        # Горизонтальный layout для кнопок - ИЗМЕНЕНО: кнопки слева и справа
-        btn_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=80)
+        # Вертикальный layout для кнопок с фиксированной высотой
+        btn_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=240)
         
-        # Кнопка выбора файлов - с закругленными краями
+        # Кнопка выбора файлов
         file_btn = Button(
-            text="Select Audio\nFiles",
-            size_hint=(0.5, None), # ИЗМЕНЕНО: занимает половину ширины
-            height=80,
+            text="Select Audio Files",
+            size_hint_y=None,
+            height=70,
             background_color=(0.3, 0.6, 0.9, 1),
             background_normal='',
             color=(1, 1, 1, 1),
-            font_size='16sp',
-            halign='center',
-            valign='middle'
+            font_size='16sp'
         )
         file_btn.bind(on_release=lambda x: self._file_picker_selected(popup))
         
         # Кнопка выбора папки (только для desktop)
         folder_btn = Button(
-            text="Select\nFolder",
-            size_hint=(0.5, None), # ИЗМЕНЕНО: занимает половину ширины
-            height=80,
+            text="Select Folder",
+            size_hint_y=None,
+            height=70,
             background_color=(0.4, 0.7, 0.4, 1),
             background_normal='',
             color=(1, 1, 1, 1),
-            font_size='16sp',
-            halign='center',
-            valign='middle'
+            font_size='16sp'
         )
         folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
+        
+        # НОВАЯ КНОПКА: Download from URL
+        url_btn = Button(
+            text="Download from URL",
+            size_hint_y=None,
+            height=70,
+            background_color=(0.8, 0.5, 0.2, 1),  # Оранжевый цвет для различия
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='16sp'
+        )
+        url_btn.bind(on_release=lambda x: self._url_download_selected(popup))
         
         btn_layout.add_widget(file_btn)
         
         # Для Android не показываем кнопку выбора папки
         if platform != 'android':
             btn_layout.add_widget(folder_btn)
-        else:
-            # На Android добавляем пустую кнопку для выравнивания
-            empty_btn = Button(
-                size_hint=(0.5, None),
-                height=80,
-                background_color=(0, 0, 0, 0),
-                background_normal='',
-                disabled=True
-            )
-            btn_layout.add_widget(empty_btn)
         
+        btn_layout.add_widget(url_btn)  # Добавляем новую кнопку
         content.add_widget(btn_layout)
-        
-        # Кнопка Cancel - ИЗМЕНЕНО: размещаем отдельно
-        cancel_layout = BoxLayout(orientation='horizontal', spacing=15, size_hint_y=None, height=50)
-        
-        # Добавляем пустое пространство слева
-        left_spacer = BoxLayout(size_hint=(0.5, 1))
-        cancel_layout.add_widget(left_spacer)
         
         cancel_btn = Button(
             text="Cancel",
-            size_hint=(0.5, 1),
+            size_hint_y=None,
+            height=50,
             background_color=(0.8, 0.3, 0.3, 1),
-            background_normal=''
+            background_normal='',
+            color=(1, 1, 1, 1)
         )
-        cancel_layout.add_widget(cancel_btn)
-        
-        # Добавляем пустое пространство справа
-        right_spacer = BoxLayout(size_hint=(0.5, 1))
-        cancel_layout.add_widget(right_spacer)
-        
-        content.add_widget(cancel_layout)
+        content.add_widget(cancel_btn)
         
         popup = Popup(
             title="Add Sounds",
             content=content,
-            size_hint=(0.8, 0.6),
-            auto_dismiss=False
+            size_hint=(0.85, 0.7),
+            auto_dismiss=False,
+            background=''
         )
         
         cancel_btn.bind(on_release=popup.dismiss)
-        
         popup.open()
-    
+
     def _file_picker_selected(self, popup):
         """Обработчик выбора файлового пикера"""
         popup.dismiss()
@@ -1038,6 +1251,16 @@ def show_upload_options(self, instance):
         """Обработчик выбора папки"""
         popup.dismiss()
         self.open_folder_picker()
+
+    def _url_download_selected(self, popup):
+        """Обработчик выбора загрузки по URL"""
+        popup.dismiss()
+        self.show_url_download_popup()
+
+    def show_url_download_popup(self):
+        """Показывает попап для загрузки по URL"""
+        popup = URLDownloadPopup(self)
+        popup.open()
 
     def open_file_picker(self):
         """Открывает выбор файлов"""
@@ -1055,7 +1278,7 @@ def show_upload_options(self, instance):
             self.open_desktop_folder_picker()
 
     def open_android_file_picker(self):
-        """Открывает файловый пикер на Android - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Открывает файловый пикер на Android"""
         try:
             from jnius import autoclass
             from android import activity
@@ -1065,26 +1288,11 @@ def show_upload_options(self, instance):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             context = PythonActivity.mActivity
             
-            # ИСПРАВЛЕНИЕ: Создаем Intent с явным указанием MIME типов для аудио
+            # Создаем Intent для выбора файла с поддержкой множественного выбора
             intent = Intent(Intent.ACTION_GET_CONTENT)
-            
-            # Указываем конкретные MIME типы для аудио файлов
             intent.setType("audio/*")
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, [
-                "audio/mpeg",      # MP3
-                "audio/mp3",       # MP3
-                "audio/wav",       # WAV
-                "audio/x-wav",     # WAV
-                "audio/ogg",       # OGG
-                "audio/x-ogg"      # OGG
-            ])
-            
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)  # Множественный выбор
-            
-            # Создаем chooser с явным заголовком
-            chooser_title = "Select audio files (MP3, WAV, OGG)"
-            chooser = Intent.createChooser(intent, chooser_title)
             
             # Регистрируем обработчик результата
             def on_activity_result(request_code, result_code, intent):
@@ -1096,8 +1304,8 @@ def show_upload_options(self, instance):
             activity.bind(on_activity_result=on_activity_result)
             
             # Запускаем активность
-            context.startActivityForResult(chooser, 123)
-            print("Android file picker started for audio files only")
+            context.startActivityForResult(intent, 123)
+            print("Android file picker started")
             
         except Exception as e:
             print(f"Error opening Android file picker: {e}")
@@ -1126,9 +1334,7 @@ def show_upload_options(self, instance):
                 
                 if processed_count > 0:
                     self.show_info_popup("Success", f"Added {processed_count} audio files")
-                    # ИСПРАВЛЕНО: гарантируем сохранение файлов и обновление интерфейса
                     Clock.schedule_once(self.delayed_load_sounds, 0.5)
-                    self.save_sound_settings()  # Сохраняем настройки
                     
         except Exception as e:
             print(f"Error in file picker: {e}")
@@ -1154,12 +1360,11 @@ def show_upload_options(self, instance):
             self.show_error_popup(f"Error selecting folder: {str(e)}")
 
     def copy_audio_file(self, file_path):
-        """Копирует аудио файл - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Копирует аудио файл"""
         try:
             filename = os.path.basename(file_path)
             
             if not filename.lower().endswith(('.mp3', '.wav', '.ogg')):
-                print(f"Skipping non-audio file: {filename}")
                 return False
             
             new_path = os.path.join(self.save_dir, filename)
@@ -1169,25 +1374,21 @@ def show_upload_options(self, instance):
                 base, ext = os.path.splitext(filename)
                 counter = 1
                 while os.path.exists(new_path):
-                    new_filename = f"{base}_{counter}{ext}"
-                    new_path = os.path.join(self.save_dir, new_filename)
+                    new_path = os.path.join(self.save_dir, f"{base}_{counter}{ext}")
                     counter += 1
             
             shutil.copy2(file_path, new_path)
             print(f"Copied to: {new_path}")
             
-            # Добавляем кнопку и сохраняем настройки
-            success = self.add_sound_button(new_path)
-            if success:
-                self.save_sound_settings()  # Сохраняем настройки после добавления
-            return success
+            # Добавляем кнопку
+            return self.add_sound_button(new_path)
                 
         except Exception as e:
             print(f"Error copying file: {e}")
             return False
 
     def copy_audio_from_folder(self, folder_path):
-        """Копирует все аудио файлы из папки - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Копирует все аудио файлы из папки"""
         try:
             audio_files = []
             for filename in os.listdir(folder_path):
@@ -1207,7 +1408,6 @@ def show_upload_options(self, instance):
             if copied_count > 0:
                 self.show_info_popup("Complete", f"Added {copied_count} audio files")
                 Clock.schedule_once(self.delayed_load_sounds, 0.5)
-                self.save_sound_settings()  # Сохраняем настройки
             else:
                 self.show_info_popup("Error", "No files were added")
             
@@ -1219,7 +1419,6 @@ def show_upload_options(self, instance):
         """Принудительно перезагружает все звуки из папки saved_sounds"""
         print("Force reloading sounds...")
         self.load_existing_sounds()
-        self.save_sound_settings()  # Сохраняем настройки после перезагрузки
 
     def open_settings(self, instance):
         """Открывает настройки"""
@@ -1331,7 +1530,7 @@ Debug Info:
         popup.open()
 
     def check_for_update(self):
-        """Проверяет обновления с правильным сравнением версий"""
+        """Проверяет обновления"""
         try:
             print("Checking for updates...")
             response = requests.get(self.UPDATE_URL, timeout=10)
@@ -1339,38 +1538,17 @@ Debug Info:
                 data = response.json()
                 latest_version = data.get('version', '')
                 
-                if latest_version and self.is_newer_version(latest_version, self.CURRENT_VERSION):
+                if latest_version and latest_version != self.CURRENT_VERSION:
                     print(f"Update available: {latest_version}")
                     download_url = data.get('download_url', '')
                     changelog = data.get('changelog', '')
                     self.show_update_popup(latest_version, download_url, changelog)
                 else:
-                    print(f"No updates available. Current: {self.CURRENT_VERSION}, Latest: {latest_version}")
+                    print("No updates available")
             else:
                 print(f"Update check failed: {response.status_code}")
         except Exception as e:
             print(f"Update check error: {e}")
-
-    def is_newer_version(self, latest, current):
-        """Сравнивает версии в формате семантического версионирования"""
-        try:
-            # Разбиваем версии на компоненты
-            latest_parts = [int(x) for x in latest.split('.')]
-            current_parts = [int(x) for x in current.split('.')]
-            
-            # Сравниваем по компонентам
-            for i in range(max(len(latest_parts), len(current_parts))):
-                latest_num = latest_parts[i] if i < len(latest_parts) else 0
-                current_num = current_parts[i] if i < len(current_parts) else 0
-                
-                if latest_num > current_num:
-                    return True
-                elif latest_num < current_num:
-                    return False
-            return False  # Версии равны
-        except (ValueError, AttributeError):
-            # Fallback: сравниваем как строки
-            return latest > current
 
     def show_update_popup(self, latest_version, download_url, changelog):
         """Показывает popup с информацией об обновлении"""
