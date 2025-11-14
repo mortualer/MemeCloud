@@ -675,6 +675,9 @@ class MyApp(App):
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
             
+            # Проверяем систему обновлений
+            Clock.schedule_once(self.verify_update_system, 5)
+            
             return self.root
             
         except Exception as e:
@@ -1200,7 +1203,7 @@ class MyApp(App):
         )
         folder_btn.bind(on_release=lambda x: self._folder_picker_selected(popup))
         
-        # НОВАЯ КНОПКА: Download from URL
+        # Кнопка Download from URL
         url_btn = Button(
             text="Download from URL",
             size_hint_y=None,
@@ -1420,6 +1423,151 @@ class MyApp(App):
         print("Force reloading sounds...")
         self.load_existing_sounds()
 
+    def verify_update_system(self, dt=None):
+        """Проверяет что система обновлений работает корректно"""
+        print(f"=== Update System Verification ===")
+        print(f"Current version: {self.CURRENT_VERSION}")
+        print(f"Update URL: {self.UPDATE_URL}")
+        
+        try:
+            response = requests.get(self.UPDATE_URL, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                latest_version = data.get('version', 'Unknown')
+                download_url = data.get('download_url', 'Unknown')
+                
+                print(f"Latest version: {latest_version}")
+                print(f"Download URL: {download_url}")
+                print(f"Update check: SUCCESS")
+                
+                # Проверяем сравнение версий
+                is_newer = self.is_newer_version(latest_version, self.CURRENT_VERSION)
+                print(f"Version comparison: {latest_version} > {self.CURRENT_VERSION} = {is_newer}")
+                
+            else:
+                print(f"Update check: FAILED (HTTP {response.status_code})")
+        except Exception as e:
+            print(f"Update check: ERROR ({e})")
+
+    def is_newer_version(self, new_version, current_version):
+        """Корректное сравнение версий"""
+        try:
+            # Простое сравнение версий в формате x.y.z
+            new_parts = list(map(int, new_version.split('.')))
+            current_parts = list(map(int, current_version.split('.')))
+            
+            # Убеждаемся что обе версии имеют минимум 3 части
+            while len(new_parts) < 3:
+                new_parts.append(0)
+            while len(current_parts) < 3:
+                current_parts.append(0)
+                
+            # Сравниваем major, minor, patch
+            for i in range(3):
+                if new_parts[i] > current_parts[i]:
+                    return True
+                elif new_parts[i] < current_parts[i]:
+                    return False
+            return False  # версии равны
+        except:
+            # Fallback: строковое сравнение
+            return new_version > current_version
+
+    def check_for_update(self, silent=False):
+        """Улучшенная проверка обновлений"""
+        try:
+            print("Checking for updates...")
+            response = requests.get(self.UPDATE_URL, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                latest_version = data.get('version', '')
+                download_url = data.get('download_url', '')
+                
+                if not latest_version:
+                    if not silent:
+                        self.show_error_popup("Update Error", "Invalid update data")
+                    return False
+                
+                # Правильное сравнение версий
+                if self.is_newer_version(latest_version, self.CURRENT_VERSION):
+                    print(f"Update available: {latest_version}")
+                    if not silent:
+                        changelog = data.get('changelog', '')
+                        critical = data.get('critical', False)
+                        self.show_update_popup(latest_version, download_url, changelog, critical)
+                    return True
+                else:
+                    if not silent:
+                        self.show_info_popup("No Updates", f"You have the latest version ({self.CURRENT_VERSION})")
+                    return False
+            else:
+                if not silent:
+                    self.show_error_popup("Update Check Failed", f"Server returned: {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"Update check error: {e}")
+            if not silent:
+                self.show_error_popup("Update Error", f"Check failed: {str(e)}")
+            return False
+
+    def show_update_popup(self, latest_version, download_url, changelog, critical=False):
+        """Показывает popup с информацией об обновлении"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        title = "Critical Update Available!" if critical else "Update Available!"
+        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
+        
+        text_label = Label(
+            text=update_text,
+            size_hint_y=0.7,
+            text_size=(Window.width * 0.7 - 20, None),
+            halign='left',
+            valign='top'
+        )
+        text_label.bind(size=text_label.setter('text_size'))
+        
+        scroll_text = ScrollView(size_hint_y=0.7)
+        scroll_text.add_widget(text_label)
+        content.add_widget(scroll_text)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        
+        update_btn = Button(
+            text="Download Update", 
+            background_color=(0.2, 0.7, 0.3, 1)
+        )
+        
+        if critical:
+            # Для критических обновлений убираем кнопку "Later"
+            btn_box.add_widget(update_btn)
+        else:
+            cancel_btn = Button(
+                text="Later", 
+                background_color=(0.8, 0.3, 0.3, 1)
+            )
+            btn_box.add_widget(update_btn)
+            btn_box.add_widget(cancel_btn)
+            cancel_btn.bind(on_release=lambda x: popup.dismiss())
+        
+        content.add_widget(btn_box)
+
+        popup = Popup(
+            title=title,
+            content=content,
+            size_hint=(0.8, 0.7),
+            auto_dismiss=False
+        )
+        
+        def download_update(instance):
+            if download_url:
+                webbrowser.open(download_url)
+            else:
+                webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
+            popup.dismiss()
+        
+        update_btn.bind(on_release=download_update)
+        popup.open()
+
     def open_settings(self, instance):
         """Открывает настройки"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
@@ -1527,67 +1675,6 @@ Debug Info:
         
         popup = Popup(title=title, content=content, size_hint=(0.6, 0.3))
         close_btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-    def check_for_update(self):
-        """Проверяет обновления"""
-        try:
-            print("Checking for updates...")
-            response = requests.get(self.UPDATE_URL, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                latest_version = data.get('version', '')
-                
-                if latest_version and latest_version != self.CURRENT_VERSION:
-                    print(f"Update available: {latest_version}")
-                    download_url = data.get('download_url', '')
-                    changelog = data.get('changelog', '')
-                    self.show_update_popup(latest_version, download_url, changelog)
-                else:
-                    print("No updates available")
-            else:
-                print(f"Update check failed: {response.status_code}")
-        except Exception as e:
-            print(f"Update check error: {e}")
-
-    def show_update_popup(self, latest_version, download_url, changelog):
-        """Показывает popup с информацией об обновлении"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        
-        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
-        text_label = Label(
-            text=update_text,
-            size_hint_y=0.7,
-            text_size=(Window.width * 0.7 - 20, None),
-            halign='left',
-            valign='top'
-        )
-        text_label.bind(size=text_label.setter('text_size'))
-        
-        scroll_text = ScrollView(size_hint_y=0.7)
-        scroll_text.add_widget(text_label)
-        content.add_widget(scroll_text)
-        
-        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
-        cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
-        btn_box.add_widget(update_btn)
-        btn_box.add_widget(cancel_btn)
-        content.add_widget(btn_box)
-
-        popup = Popup(
-            title="Update Available!",
-            content=content,
-            size_hint=(0.8, 0.7),
-            auto_dismiss=False
-        )
-        
-        def download_update(instance):
-            webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
-            popup.dismiss()
-        
-        update_btn.bind(on_release=download_update)
-        cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
 
 if __name__ == "__main__":
