@@ -25,6 +25,59 @@ if platform == 'android':
     from jnius import autoclass, cast
 
 # -------------------------
+# Sound Cache Class
+# -------------------------
+class SoundCache:
+    def __init__(self, max_size=10):
+        self.max_size = max_size
+        self.cache = {}
+        self.access_order = []
+    
+    def get_sound(self, path):
+        if path in self.cache:
+            # Перемещаем в конец (самый недавний)
+            if path in self.access_order:
+                self.access_order.remove(path)
+            self.access_order.append(path)
+            print(f"Sound cache hit: {os.path.basename(path)}")
+            return self.cache[path]
+        print(f"Sound cache miss: {os.path.basename(path)}")
+        return None
+    
+    def add_sound(self, path, sound):
+        if len(self.cache) >= self.max_size:
+            # Удаляем самый старый
+            if self.access_order:
+                oldest = self.access_order.pop(0)
+                if oldest in self.cache:
+                    print(f"Removing from cache: {os.path.basename(oldest)}")
+                    if hasattr(self.cache[oldest], 'unload'):
+                        self.cache[oldest].unload()
+                    del self.cache[oldest]
+        
+        self.cache[path] = sound
+        self.access_order.append(path)
+        print(f"Added to cache: {os.path.basename(path)} (cache size: {len(self.cache)})")
+    
+    def preload_sounds(self, sound_paths):
+        """Предзагружает первые несколько звуков для быстрого доступа"""
+        print(f"Preloading {min(3, len(sound_paths))} sounds...")
+        for path in sound_paths[:3]:  # Предзагружаем первые 3 звука
+            if path not in self.cache:
+                sound = SoundLoader.load(path)
+                if sound:
+                    self.add_sound(path, sound)
+    
+    def clear_cache(self):
+        """Очищает кэш"""
+        for sound in self.cache.values():
+            if hasattr(sound, 'unload'):
+                sound.unload()
+        self.cache.clear()
+        self.access_order.clear()
+        print("Sound cache cleared")
+
+# -------------------------
 # URL Download Popup Class
 # -------------------------
 class URLDownloadPopup(Popup):
@@ -253,10 +306,11 @@ class URLDownloadPopup(Popup):
 class SoundButton(BoxLayout):
     current_button = None
 
-    def __init__(self, text, sound, icon_path=None, app=None, sound_id=None, **kwargs):
+    def __init__(self, text, sound, icon_path=None, app=None, sound_id=None, sound_path=None, **kwargs):
         super().__init__(**kwargs)
         self.app = app
         self.sound_id = sound_id or text
+        self.sound_path = sound_path  # Сохраняем путь к файлу для кэширования
         self.orientation = 'horizontal'
         self.size_hint_y = None
         self.height = 150
@@ -271,6 +325,8 @@ class SoundButton(BoxLayout):
         self.highlight_anim = None
         self.sound_check_event = None
         self.expanded_view = None  # Ссылка на расширенное представление
+        self.is_favorite = False  # Новое свойство для избранного
+        self.favorite_icon = None  # Ссылка на иконку избранного
 
         with self.canvas.before:
             Color(0, 0, 0, 0.1)
@@ -281,6 +337,15 @@ class SoundButton(BoxLayout):
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[20])
 
         self.original_widgets = []
+        
+        # Иконка избранного (будет показана только для избранных звуков)
+        self.favorite_icon_widget = Image(
+            source="heart.svg" if os.path.exists("heart.svg") else "", 
+            size_hint=(None, None), 
+            size=(30, 30),
+            pos_hint={'right': 0.95, 'top': 0.9},
+            opacity=0  # Изначально скрыта
+        )
         
         if icon_path and os.path.exists(icon_path):
             self.icon_widget = Image(source=icon_path, size_hint=(None, 1), width=50)
@@ -301,9 +366,42 @@ class SoundButton(BoxLayout):
         self.button.bind(on_touch_down=self.start_long_press, on_touch_up=self.end_long_press)
         self.original_widgets.append(self.button)
         self.add_widget(self.button)
+        self.add_widget(self.favorite_icon_widget)  # Добавляем иконку избранного
 
         self.bind(pos=self.update_rect, size=self.update_rect)
         self._long_press_trigger = Clock.create_trigger(self.expand, 0.8)
+        
+        # Загружаем состояние избранного
+        if self.app and self.sound_id in self.app.favorites:
+            self.set_favorite(True)
+
+    def set_favorite(self, favorite):
+        """Устанавливает состояние избранного и обновляет отображение"""
+        self.is_favorite = favorite
+        if favorite:
+            self.favorite_icon_widget.opacity = 1
+            if self.app and self.sound_id not in self.app.favorites:
+                self.app.favorites.append(self.sound_id)
+                self.app.save_favorites()
+        else:
+            self.favorite_icon_widget.opacity = 0
+            if self.app and self.sound_id in self.app.favorites:
+                self.app.favorites.remove(self.sound_id)
+                self.app.save_favorites()
+        
+        # Обновляем кнопку в расширенном виде если он открыт
+        if self.is_expanded and self.expanded_view:
+            self.update_favorite_button()
+
+    def update_favorite_button(self):
+        """Обновляет кнопку избранного в расширенном виде"""
+        if hasattr(self, 'favorite_btn'):
+            if self.is_favorite:
+                self.favorite_btn.text = "❤️ REMOVE FROM FAVORITES"
+                self.favorite_btn.background_color = (0.8, 0.2, 0.2, 1)
+            else:
+                self.favorite_btn.text = "🤍 ADD TO FAVORITES"
+                self.favorite_btn.background_color = (0.3, 0.4, 0.6, 1)
 
     def update_rect(self, *args):
         self.rect.pos = self.pos
@@ -427,14 +525,29 @@ class SoundButton(BoxLayout):
         self.expanded_view.add_widget(title_label)
         
         # Контейнер для кнопок управления
-        controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=250)
+        controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=300)
+        
+        # Кнопка избранного
+        self.favorite_btn = Button(
+            text="🤍 ADD TO FAVORITES" if not self.is_favorite else "❤️ REMOVE FROM FAVORITES",
+            size_hint_y=None,
+            height=80,
+            background_color=(0.3, 0.4, 0.6, 1) if not self.is_favorite else (0.8, 0.2, 0.2, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='18sp',
+            bold=True
+        )
+        self.favorite_btn.bind(on_press=self.on_favorite_button_press)
+        self.favorite_btn.bind(on_release=self.on_favorite_button_release)
+        controls_layout.add_widget(self.favorite_btn)
         
         # Кнопка проигрывания
         play_btn = Button(
             text='PLAY SOUND',
             size_hint_y=None,
-            height=100,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            height=80,
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='22sp',
@@ -445,12 +558,12 @@ class SoundButton(BoxLayout):
         controls_layout.add_widget(play_btn)
         
         # Кнопки управления
-        btn_layout = BoxLayout(size_hint_y=None, height=100, spacing=15)
+        btn_layout = BoxLayout(size_hint_y=None, height=80, spacing=15)
         
         delete_btn = Button(
             text='DELETE',
             size_hint_x=0.6,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -462,7 +575,7 @@ class SoundButton(BoxLayout):
         close_btn = Button(
             text='CLOSE',
             size_hint_x=0.4,
-            background_color=(0.3, 0.4, 0.6, 1),  # Темно-голубовато-синий
+            background_color=(0.3, 0.4, 0.6, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='18sp'
@@ -474,6 +587,19 @@ class SoundButton(BoxLayout):
         controls_layout.add_widget(btn_layout)
         self.expanded_view.add_widget(controls_layout)
         self.add_widget(self.expanded_view)
+
+    def on_favorite_button_press(self, instance):
+        """Анимация при нажатии кнопки избранного"""
+        Animation(background_color=(0.4, 0.5, 0.7, 1), duration=0.1).start(instance)
+
+    def on_favorite_button_release(self, instance):
+        """Анимация при отпускании кнопки избранного"""
+        Animation(background_color=(0.3, 0.4, 0.6, 1), duration=0.3).start(instance)
+        self.toggle_favorite()
+
+    def toggle_favorite(self):
+        """Переключает состояние избранного"""
+        self.set_favorite(not self.is_favorite)
 
     def on_play_button_press(self, instance):
         """Анимация при нажатии кнопки play"""
@@ -610,6 +736,8 @@ class SoundButton(BoxLayout):
         self.clear_widgets()
         for widget in self.original_widgets:
             self.add_widget(widget)
+        # Добавляем иконку избранного обратно
+        self.add_widget(self.favorite_icon_widget)
         # Сбрасываем прозрачность на случай следующего расширения
         self.opacity = 1
         self.expanded_view = None
@@ -623,7 +751,7 @@ class SoundButton(BoxLayout):
             self.sound_check_event = None
 
 class MyApp(App):
-    CURRENT_VERSION = "1.3.0"
+    CURRENT_VERSION = "1.3.1"
     UPDATE_URL = "https://raw.githubusercontent.com/mortualer/MemeCloud/main/update.json"
 
     def __init__(self, **kwargs):
@@ -643,6 +771,7 @@ class MyApp(App):
             self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_sounds")
 
         self.settings_file = os.path.join(self.save_dir, "app_settings.json")
+        self.favorites_file = os.path.join(self.save_dir, "favorites.json")
         print(f"Save directory: {self.save_dir}")
 
         # ВАЖНО: Создаем директорию ДО загрузки настроек
@@ -651,8 +780,15 @@ class MyApp(App):
         self.buttons = []
         self.pin_active = False
         self.sound_settings = {}
+        self.favorites = []  # Список избранных sound_id
+        self.show_favorites_only = False  # Флаг фильтра избранных
         self.permissions_granted = False
+        
+        # Инициализируем кэш звуков
+        self.sound_cache = SoundCache(max_size=15)
+        
         self.load_settings()
+        self.load_favorites()
 
     def build(self):
         try:
@@ -674,9 +810,6 @@ class MyApp(App):
                 
             # Проверяем обновления
             Clock.schedule_once(self.delayed_check_update, 3)
-            
-            # Проверяем систему обновлений
-            Clock.schedule_once(self.verify_update_system, 5)
             
             return self.root
             
@@ -717,12 +850,25 @@ class MyApp(App):
         self.search_input.bind(text=self.filter_buttons)
         top_bar.add_widget(self.search_input)
 
-        # Кнопка Pin - пурпурного цвета как у звуковых кнопок
+        # Кнопка Favorites - для фильтрации избранных
+        self.favorites_button = Button(
+            text="⭐", 
+            size_hint=(None, 1), 
+            width=100,
+            background_color=(0.25, 0.25, 0.35, 1),
+            background_normal='',
+            color=(1, 1, 1, 1),
+            font_size='20sp'
+        )
+        self.favorites_button.bind(on_release=self.toggle_favorites_filter)
+        top_bar.add_widget(self.favorites_button)
+
+        # Кнопка Pin
         self.pin_button = Button(
             text="Pin", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -730,12 +876,12 @@ class MyApp(App):
         self.pin_button.bind(on_release=self.toggle_pin)
         top_bar.add_widget(self.pin_button)
 
-        # Кнопка Upload - пурпурного цвета
+        # Кнопка Upload
         self.upload_button = Button(
             text="Upload", 
             size_hint=(None, 1), 
-            width=175,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            width=100,
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -743,12 +889,12 @@ class MyApp(App):
         self.upload_button.bind(on_release=self.show_upload_options)
         top_bar.add_widget(self.upload_button)
 
-        # Кнопка Info - пурпурного цвета
+        # Кнопка Info
         self.settings_button = Button(
             text="i", 
             size_hint=(None, 1), 
             width=100,
-            background_color=(0.25, 0.25, 0.35, 1),  # Пурпурный как у кнопок
+            background_color=(0.25, 0.25, 0.35, 1),
             background_normal='',
             color=(1, 1, 1, 1),
             font_size='14sp'
@@ -764,6 +910,19 @@ class MyApp(App):
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
         self.root.add_widget(self.scroll)
+
+    def toggle_favorites_filter(self, instance):
+        """Переключает фильтр избранных звуков"""
+        self.show_favorites_only = not self.show_favorites_only
+        if self.show_favorites_only:
+            instance.background_color = (0.15, 0.15, 0.25, 1)  # Темнее при активности
+            instance.text = "❤️"
+        else:
+            instance.background_color = (0.25, 0.25, 0.35, 1)  # Обычный цвет
+            instance.text = "⭐"
+        
+        # Применяем фильтр
+        self.filter_buttons()
 
     def on_start(self):
         print("App started successfully")
@@ -826,6 +985,29 @@ class MyApp(App):
                 
         except Exception as e:
             print(f"Error copying built-in sounds: {e}")
+
+    def load_favorites(self):
+        """Загружает список избранных звуков"""
+        try:
+            if os.path.exists(self.favorites_file):
+                with open(self.favorites_file, 'r', encoding='utf-8') as f:
+                    self.favorites = json.load(f)
+                print(f"Loaded {len(self.favorites)} favorites")
+            else:
+                self.favorites = []
+                print("No favorites file found")
+        except Exception as e:
+            print(f"Error loading favorites: {e}")
+            self.favorites = []
+
+    def save_favorites(self):
+        """Сохраняет список избранных звуков"""
+        try:
+            with open(self.favorites_file, 'w', encoding='utf-8') as f:
+                json.dump(self.favorites, f, ensure_ascii=False, indent=2)
+            print("Favorites saved successfully")
+        except Exception as e:
+            print(f"Error saving favorites: {e}")
 
     def request_android_permissions(self, dt=None):
         """Запрашивает разрешения на Android"""
@@ -1064,6 +1246,10 @@ class MyApp(App):
                 sound_files.append((sound_path, filename))
                 found_files = True
         
+        # Предзагружаем звуки в кэш
+        if sound_files:
+            self.sound_cache.preload_sounds([path for path, name in sound_files])
+        
         # Затем добавляем все кнопки сразу
         for sound_path, filename in sound_files:
             print(f"Found audio file: {filename}")
@@ -1084,7 +1270,7 @@ class MyApp(App):
             self.layout.add_widget(no_sounds_label)
 
     def add_sound_button(self, path):
-        """Добавляет кнопку звука"""
+        """Добавляет кнопку звука с использованием кэша"""
         try:
             # Проверяем, не добавлен ли уже этот звук
             filename = os.path.basename(path)
@@ -1108,10 +1294,20 @@ class MyApp(App):
                     icon_file = potential_icon
                     break
             
-            sound = SoundLoader.load(path)
+            # Пытаемся получить звук из кэша
+            sound = self.sound_cache.get_sound(path)
+            if sound is None:
+                # Если нет в кэше, загружаем
+                sound = SoundLoader.load(path)
+                if sound:
+                    self.sound_cache.add_sound(path, sound)
+            
             if sound:
                 print(f"Sound loaded successfully: {filename}")
-                btn_widget = SoundButton(btn_text, sound, icon_file, app=self, sound_id=sound_id)
+                btn_widget = SoundButton(
+                    btn_text, sound, icon_file, app=self, 
+                    sound_id=sound_id, sound_path=path  # Сохраняем путь для кэширования
+                )
                 
                 if sound_id in self.sound_settings:
                     btn_widget.volume = self.sound_settings[sound_id].get('volume', 1.0)
@@ -1128,12 +1324,25 @@ class MyApp(App):
             return False
 
     def delete_sound(self, sound_button):
-        """Удаляет звук"""
+        """Удаляет звук и очищает его из кэша и избранного"""
         try:
             for btn in self.buttons[:]:
                 if btn == sound_button:
                     if btn.sound:
                         btn.sound.stop()
+                    
+                    # Удаляем звук из кэша
+                    if hasattr(btn, 'sound_path') and btn.sound_path:
+                        if btn.sound_path in self.sound_cache.cache:
+                            del self.sound_cache.cache[btn.sound_path]
+                            if btn.sound_path in self.sound_cache.access_order:
+                                self.sound_cache.access_order.remove(btn.sound_path)
+                            print(f"Removed from cache: {os.path.basename(btn.sound_path)}")
+                    
+                    # Удаляем из избранного
+                    if btn.sound_id in self.favorites:
+                        self.favorites.remove(btn.sound_id)
+                        self.save_favorites()
                     
                     self.layout.remove_widget(btn)
                     self.buttons.remove(btn)
@@ -1423,166 +1632,23 @@ class MyApp(App):
         print("Force reloading sounds...")
         self.load_existing_sounds()
 
-    def verify_update_system(self, dt=None):
-        """Проверяет что система обновлений работает корректно"""
-        print(f"=== Update System Verification ===")
-        print(f"Current version: {self.CURRENT_VERSION}")
-        print(f"Update URL: {self.UPDATE_URL}")
-        
-        try:
-            response = requests.get(self.UPDATE_URL, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                latest_version = data.get('version', 'Unknown')
-                download_url = data.get('download_url', 'Unknown')
-                
-                print(f"Latest version: {latest_version}")
-                print(f"Download URL: {download_url}")
-                print(f"Update check: SUCCESS")
-                
-                # Проверяем сравнение версий
-                is_newer = self.is_newer_version(latest_version, self.CURRENT_VERSION)
-                print(f"Version comparison: {latest_version} > {self.CURRENT_VERSION} = {is_newer}")
-                
-            else:
-                print(f"Update check: FAILED (HTTP {response.status_code})")
-        except Exception as e:
-            print(f"Update check: ERROR ({e})")
-
-    def is_newer_version(self, new_version, current_version):
-        """Корректное сравнение версий"""
-        try:
-            # Простое сравнение версий в формате x.y.z
-            new_parts = list(map(int, new_version.split('.')))
-            current_parts = list(map(int, current_version.split('.')))
-            
-            # Убеждаемся что обе версии имеют минимум 3 части
-            while len(new_parts) < 3:
-                new_parts.append(0)
-            while len(current_parts) < 3:
-                current_parts.append(0)
-                
-            # Сравниваем major, minor, patch
-            for i in range(3):
-                if new_parts[i] > current_parts[i]:
-                    return True
-                elif new_parts[i] < current_parts[i]:
-                    return False
-            return False  # версии равны
-        except:
-            # Fallback: строковое сравнение
-            return new_version > current_version
-
-    def check_for_update(self, silent=False):
-        """Улучшенная проверка обновлений"""
-        try:
-            print("Checking for updates...")
-            response = requests.get(self.UPDATE_URL, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                latest_version = data.get('version', '')
-                download_url = data.get('download_url', '')
-                
-                if not latest_version:
-                    if not silent:
-                        self.show_error_popup("Update Error", "Invalid update data")
-                    return False
-                
-                # Правильное сравнение версий
-                if self.is_newer_version(latest_version, self.CURRENT_VERSION):
-                    print(f"Update available: {latest_version}")
-                    if not silent:
-                        changelog = data.get('changelog', '')
-                        critical = data.get('critical', False)
-                        self.show_update_popup(latest_version, download_url, changelog, critical)
-                    return True
-                else:
-                    if not silent:
-                        self.show_info_popup("No Updates", f"You have the latest version ({self.CURRENT_VERSION})")
-                    return False
-            else:
-                if not silent:
-                    self.show_error_popup("Update Check Failed", f"Server returned: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"Update check error: {e}")
-            if not silent:
-                self.show_error_popup("Update Error", f"Check failed: {str(e)}")
-            return False
-
-    def show_update_popup(self, latest_version, download_url, changelog, critical=False):
-        """Показывает popup с информацией об обновлении"""
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        
-        title = "Critical Update Available!" if critical else "Update Available!"
-        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
-        
-        text_label = Label(
-            text=update_text,
-            size_hint_y=0.7,
-            text_size=(Window.width * 0.7 - 20, None),
-            halign='left',
-            valign='top'
-        )
-        text_label.bind(size=text_label.setter('text_size'))
-        
-        scroll_text = ScrollView(size_hint_y=0.7)
-        scroll_text.add_widget(text_label)
-        content.add_widget(scroll_text)
-        
-        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        
-        update_btn = Button(
-            text="Download Update", 
-            background_color=(0.2, 0.7, 0.3, 1)
-        )
-        
-        if critical:
-            # Для критических обновлений убираем кнопку "Later"
-            btn_box.add_widget(update_btn)
-        else:
-            cancel_btn = Button(
-                text="Later", 
-                background_color=(0.8, 0.3, 0.3, 1)
-            )
-            btn_box.add_widget(update_btn)
-            btn_box.add_widget(cancel_btn)
-            cancel_btn.bind(on_release=lambda x: popup.dismiss())
-        
-        content.add_widget(btn_box)
-
-        popup = Popup(
-            title=title,
-            content=content,
-            size_hint=(0.8, 0.7),
-            auto_dismiss=False
-        )
-        
-        def download_update(instance):
-            if download_url:
-                webbrowser.open(download_url)
-            else:
-                webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
-            popup.dismiss()
-        
-        update_btn.bind(on_release=download_update)
-        popup.open()
-
     def open_settings(self, instance):
-        """Открывает настройки"""
+        """Открывает настройки с информацией о кэше и избранных"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
         permissions_status = "Granted" if self.permissions_granted else "Not granted"
-        debug_info = f"""MemeCloud v{self.CURRENT_VERSION}
+        cache_info = f"""MemeCloud v{self.CURRENT_VERSION}
 
 Debug Info:
 • Sounds loaded: {len(self.buttons)}
+• Favorites: {len(self.favorites)}
+• Cache size: {len(self.sound_cache.cache)}/{self.sound_cache.max_size}
 • Save dir: {self.save_dir}
 • Permissions: {permissions_status}
 • Platform: {platform}"""
 
         info_label = Label(
-            text=debug_info,
+            text=cache_info,
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
@@ -1603,6 +1669,15 @@ Debug Info:
             )
             perm_btn.bind(on_release=lambda x: self.request_android_permissions())
             btn_layout.add_widget(perm_btn)
+        
+        # Кнопка очистки кэша
+        cache_btn = Button(
+            text="Clear Cache", 
+            background_color=(0.5, 0.3, 0.3, 1),
+            font_size='12sp'
+        )
+        cache_btn.bind(on_release=lambda x: self.clear_sound_cache())
+        btn_layout.add_widget(cache_btn)
         
         github_btn = Button(
             text="GitHub", 
@@ -1628,6 +1703,11 @@ Debug Info:
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
+    def clear_sound_cache(self):
+        """Очищает кэш звуков"""
+        self.sound_cache.clear_cache()
+        self.show_info_popup("Cache Cleared", "Sound cache has been cleared")
+
     def toggle_pin(self, instance):
         """Переключает режим закрепления"""
         self.pin_active = not self.pin_active
@@ -1647,10 +1727,20 @@ Debug Info:
                     btn.collapse()
 
     def filter_buttons(self, *args):
-        """Фильтрует кнопки по поисковому запросу"""
-        value = self.search_input.text.lower()
+        """Фильтрует кнопки по поисковому запросу и избранным"""
+        search_value = self.search_input.text.lower()
+        
         for btn_widget in self.buttons:
-            visible = value in btn_widget.btn_text.lower()
+            # Проверяем соответствие поисковому запросу
+            matches_search = search_value in btn_widget.btn_text.lower()
+            
+            # Проверяем соответствие фильтру избранных
+            if self.show_favorites_only:
+                matches_filter = btn_widget.sound_id in self.favorites
+            else:
+                matches_filter = True
+            
+            visible = matches_search and matches_filter
             btn_widget.opacity = 1 if visible else 0
             btn_widget.disabled = not visible
             btn_widget.height = 150 if visible else 0
@@ -1675,6 +1765,67 @@ Debug Info:
         
         popup = Popup(title=title, content=content, size_hint=(0.6, 0.3))
         close_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def check_for_update(self):
+        """Проверяет обновления"""
+        try:
+            print("Checking for updates...")
+            response = requests.get(self.UPDATE_URL, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                latest_version = data.get('version', '')
+                
+                if latest_version and latest_version != self.CURRENT_VERSION:
+                    print(f"Update available: {latest_version}")
+                    download_url = data.get('download_url', '')
+                    changelog = data.get('changelog', '')
+                    self.show_update_popup(latest_version, download_url, changelog)
+                else:
+                    print("No updates available")
+            else:
+                print(f"Update check failed: {response.status_code}")
+        except Exception as e:
+            print(f"Update check error: {e}")
+
+    def show_update_popup(self, latest_version, download_url, changelog):
+        """Показывает popup с информацией об обновлении"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        update_text = f"New version available: {latest_version}\n\nWhat's new:\n{changelog}"
+        text_label = Label(
+            text=update_text,
+            size_hint_y=0.7,
+            text_size=(Window.width * 0.7 - 20, None),
+            halign='left',
+            valign='top'
+        )
+        text_label.bind(size=text_label.setter('text_size'))
+        
+        scroll_text = ScrollView(size_hint_y=0.7)
+        scroll_text.add_widget(text_label)
+        content.add_widget(scroll_text)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        update_btn = Button(text="Download Update", background_color=(0.2, 0.7, 0.3, 1))
+        cancel_btn = Button(text="Later", background_color=(0.8, 0.3, 0.3, 1))
+        btn_box.add_widget(update_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(
+            title="Update Available!",
+            content=content,
+            size_hint=(0.8, 0.7),
+            auto_dismiss=False
+        )
+        
+        def download_update(instance):
+            webbrowser.open("https://github.com/mortualer/MemeCloud/releases/latest")
+            popup.dismiss()
+        
+        update_btn.bind(on_release=download_update)
+        cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
 
 if __name__ == "__main__":
