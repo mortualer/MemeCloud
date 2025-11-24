@@ -18,7 +18,6 @@ import json
 import shutil
 from kivy.utils import platform
 from urllib.parse import urlparse
-from datetime import datetime
 
 if platform == 'android':
     from android.permissions import request_permissions, check_permission, Permission
@@ -79,82 +78,76 @@ class SoundCache:
         print("Sound cache cleared")
 
 # -------------------------
-# Usage Statistics Class
+# Smart Search Input Class
 # -------------------------
-class UsageStatistics:
-    def __init__(self, app):
+class SmartSearchInput(TextInput):
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
         self.app = app
-        self.stats_file = os.path.join(app.save_dir, "usage_stats.json")
-        self.stats = self.load_stats()
+        self.suggestions_popup = None
+        self.suggestions = []
     
-    def load_stats(self):
-        """Загружает статистику из файла"""
-        try:
-            if os.path.exists(self.stats_file):
-                with open(self.stats_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Error loading stats: {e}")
-        return {
-            "play_count": {},
-            "last_played": {},
-            "total_plays": 0,
-            "first_use_date": datetime.now().isoformat()
-        }
-    
-    def save_stats(self):
-        """Сохраняет статистику в файл"""
-        try:
-            with open(self.stats_file, 'w', encoding='utf-8') as f:
-                json.dump(self.stats, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Error saving stats: {e}")
-    
-    def record_play(self, sound_id, sound_name):
-        """Записывает воспроизведение звука"""
-        # Счетчик воспроизведений для конкретного звука
-        if sound_id not in self.stats["play_count"]:
-            self.stats["play_count"][sound_id] = 0
-        self.stats["play_count"][sound_id] += 1
+    def on_text(self, instance, value):
+        super().on_text(instance, value)
         
-        # Общий счетчик воспроизведений
-        self.stats["total_plays"] = self.stats.get("total_plays", 0) + 1
+        # Закрываем предыдущие подсказки
+        if self.suggestions_popup:
+            self.suggestions_popup.dismiss()
+            self.suggestions_popup = None
         
-        # Время последнего воспроизведения
-        self.stats["last_played"][sound_id] = {
-            "timestamp": datetime.now().isoformat(),
-            "name": sound_name
-        }
-        
-        self.save_stats()
+        # Показываем подсказки если введено 2+ символа
+        if len(value) >= 2:
+            self.show_suggestions(value)
     
-    def get_most_played(self, limit=5):
-        """Возвращает самые популярные звуки"""
-        played = [(sound_id, count) for sound_id, count in self.stats["play_count"].items()]
-        return sorted(played, key=lambda x: x[1], reverse=True)[:limit]
-    
-    def get_recently_played(self, limit=5):
-        """Возвращает недавно воспроизведенные звуки"""
-        recent = []
-        for sound_id, data in self.stats["last_played"].items():
-            if isinstance(data, dict) and "timestamp" in data:
-                recent.append((sound_id, data["timestamp"], data.get("name", sound_id)))
+    def show_suggestions(self, query):
+        """Показывает подсказки для поиска"""
+        # Получаем совпадения
+        matching_sounds = []
+        for btn in self.app.buttons:
+            if query.lower() in btn.btn_text.lower():
+                matching_sounds.append(btn.btn_text)
         
-        return sorted(recent, key=lambda x: x[1], reverse=True)[:limit]
-    
-    def get_stats_summary(self):
-        """Возвращает сводку статистики"""
-        total_sounds = len(self.stats["play_count"])
-        total_plays = self.stats.get("total_plays", 0)
-        most_played = self.get_most_played(1)
-        most_played_name = most_played[0][0] if most_played else "None"
+        if not matching_sounds:
+            return
         
-        return {
-            "total_sounds": total_sounds,
-            "total_plays": total_plays,
-            "most_played": most_played_name,
-            "first_use": self.stats.get("first_use_date", "Unknown")
-        }
+        # Создаем контент для попапа
+        content = BoxLayout(orientation='vertical', size_hint=(1, None))
+        content.bind(minimum_height=content.setter('height'))
+        
+        # Добавляем до 5 подсказок
+        for suggestion in matching_sounds[:5]:
+            suggestion_btn = Button(
+                text=suggestion,
+                size_hint_y=None,
+                height=40,
+                background_color=(0.9, 0.9, 0.95, 1),
+                background_normal='',
+                color=(0.2, 0.2, 0.2, 1),
+                font_size='14sp'
+            )
+            suggestion_btn.bind(on_release=lambda x, s=suggestion: self.select_suggestion(s))
+            content.add_widget(suggestion_btn)
+        
+        # Создаем и показываем попап
+        self.suggestions_popup = Popup(
+            content=content,
+            size_hint=(0.9, None),
+            height=min(len(matching_sounds) * 40, 200),
+            pos_hint={'center_x': 0.5, 'top': 0.1},
+            background='',
+            separator_color=(0.7, 0.7, 0.8, 1)
+        )
+        self.suggestions_popup.open()
+    
+    def select_suggestion(self, suggestion):
+        """Выбирает подсказку и применяет её"""
+        self.text = suggestion
+        if self.suggestions_popup:
+            self.suggestions_popup.dismiss()
+            self.suggestions_popup = None
+        
+        # Применяем фильтр
+        self.app.filter_buttons()
 
 # -------------------------
 # URL Download Popup Class
@@ -380,119 +373,6 @@ class URLDownloadPopup(Popup):
             button.disabled = False
 
 # -------------------------
-# Statistics Popup Class
-# -------------------------
-class StatisticsPopup(Popup):
-    def __init__(self, app, **kwargs):
-        super().__init__(**kwargs)
-        self.app = app
-        self.title = "Usage Statistics"
-        self.size_hint = (0.9, 0.8)
-        self.background = ''
-
-        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
-        
-        # Общая статистика
-        summary = self.app.usage_stats.get_stats_summary()
-        summary_text = f"""📊 Usage Summary:
-
-• Total Sounds: {summary['total_sounds']}
-• Total Plays: {summary['total_plays']}
-• First Use: {summary['first_use'][:10]}
-• Cache Size: {len(self.app.sound_cache.cache)}/{self.app.sound_cache.max_size}"""
-
-        summary_label = Label(
-            text=summary_text,
-            size_hint_y=None,
-            height=150,
-            text_size=(Window.width * 0.8 - 40, None),
-            halign='left',
-            valign='top'
-        )
-        summary_label.bind(size=summary_label.setter('text_size'))
-        content.add_widget(summary_label)
-
-        # Самые популярные звуки
-        most_played = self.app.usage_stats.get_most_played(5)
-        most_played_text = "🎵 Most Played Sounds:\n"
-        for i, (sound_id, count) in enumerate(most_played, 1):
-            sound_name = self.app.usage_stats.stats["last_played"].get(sound_id, {}).get("name", sound_id)
-            most_played_text += f"{i}. {sound_name}: {count} plays\n"
-
-        most_played_label = Label(
-            text=most_played_text,
-            size_hint_y=None,
-            height=180,
-            text_size=(Window.width * 0.8 - 40, None),
-            halign='left',
-            valign='top'
-        )
-        most_played_label.bind(size=most_played_label.setter('text_size'))
-        content.add_widget(most_played_label)
-
-        # Недавно воспроизведенные
-        recent = self.app.usage_stats.get_recently_played(5)
-        recent_text = "⏰ Recently Played:\n"
-        for i, (sound_id, timestamp, name) in enumerate(recent, 1):
-            time_str = timestamp[:16].replace('T', ' ')
-            recent_text += f"{i}. {name}\n   {time_str}\n"
-
-        recent_label = Label(
-            text=recent_text,
-            size_hint_y=None,
-            height=200,
-            text_size=(Window.width * 0.8 - 40, None),
-            halign='left',
-            valign='top'
-        )
-        recent_label.bind(size=recent_label.setter('text_size'))
-        content.add_widget(recent_label)
-
-        # Кнопки
-        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        
-        clear_btn = Button(text="Clear Stats", background_color=(0.8, 0.3, 0.3, 1))
-        clear_btn.bind(on_release=self.clear_stats)
-        
-        close_btn = Button(text="Close", background_color=(0.4, 0.4, 0.6, 1))
-        close_btn.bind(on_release=self.dismiss)
-        
-        btn_layout.add_widget(clear_btn)
-        btn_layout.add_widget(close_btn)
-        content.add_widget(btn_layout)
-
-        self.content = content
-
-    def clear_stats(self, instance):
-        """Очищает статистику"""
-        def confirm_clear(btn):
-            self.app.usage_stats.stats = {
-                "play_count": {},
-                "last_played": {},
-                "total_plays": 0,
-                "first_use_date": datetime.now().isoformat()
-            }
-            self.app.usage_stats.save_stats()
-            self.dismiss()
-            self.app.show_info_popup("Statistics Cleared", "All usage statistics have been reset")
-        
-        content = BoxLayout(orientation='vertical', spacing=15, padding=20)
-        content.add_widget(Label(text="Clear all usage statistics?"))
-        
-        btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
-        yes_btn = Button(text="Yes", background_color=(0.8, 0.3, 0.3, 1))
-        no_btn = Button(text="No", background_color=(0.4, 0.4, 0.6, 1))
-        
-        btn_layout.add_widget(yes_btn)
-        btn_layout.add_widget(no_btn)
-        content.add_widget(btn_layout)
-        
-        popup = Popup(title="Confirm Clear", content=content, size_hint=(0.6, 0.3))
-        yes_btn.bind(on_release=confirm_clear)
-        no_btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-# -------------------------
 # SoundButton Class
 # -------------------------
 class SoundButton(BoxLayout):
@@ -567,11 +447,6 @@ class SoundButton(BoxLayout):
             self.sound.stop()
             self.sound.play()
             self.start_highlight()
-            
-            # Записываем статистику воспроизведения
-            if self.app and hasattr(self.app, 'usage_stats'):
-                self.app.usage_stats.record_play(self.sound_id, self.btn_text)
-            
             # Отменяем предыдущую проверку и запускаем новую
             if self.sound_check_event:
                 self.sound_check_event.cancel()
@@ -676,20 +551,6 @@ class SoundButton(BoxLayout):
         )
         title_label.bind(on_touch_down=self.on_title_touch)
         self.expanded_view.add_widget(title_label)
-        
-        # Статистика воспроизведения (новая секция)
-        play_count = 0
-        if self.app and hasattr(self.app, 'usage_stats'):
-            play_count = self.app.usage_stats.stats["play_count"].get(self.sound_id, 0)
-        
-        stats_label = Label(
-            text=f"Played: {play_count} times",
-            size_hint_y=None,
-            height=40,
-            font_size='16sp',
-            color=(1, 1, 1, 0.7)
-        )
-        self.expanded_view.add_widget(stats_label)
         
         # Контейнер для кнопок управления
         controls_layout = BoxLayout(orientation='vertical', spacing=15, size_hint_y=None, height=250)
@@ -921,9 +782,6 @@ class MyApp(App):
         # Инициализируем кэш звуков
         self.sound_cache = SoundCache(max_size=15)
         
-        # Инициализируем статистику использования
-        self.usage_stats = UsageStatistics(self)
-        
         self.load_settings()
 
     def build(self):
@@ -974,7 +832,9 @@ class MyApp(App):
         # Верхняя панель
         top_bar = BoxLayout(orientation='horizontal', size_hint=(1, None), height=75, spacing=15)
 
-        self.search_input = TextInput(
+        # Используем умный поиск вместо обычного TextInput
+        self.search_input = SmartSearchInput(
+            app=self,
             size_hint=(1, 1), 
             hint_text="Search...", 
             multiline=False,
@@ -983,7 +843,8 @@ class MyApp(App):
             hint_text_color=(0.5, 0.5, 0.5, 0.7),
             padding=[15, 10]
         )
-        self.search_input.bind(text=self.filter_buttons)
+        # Биндим текстовые изменения для фильтрации
+        self.search_input.bind(text=self.on_search_text_change)
         top_bar.add_widget(self.search_input)
 
         # Кнопка Pin - пурпурного цвета как у звуковых кнопок
@@ -1033,6 +894,10 @@ class MyApp(App):
         self.layout.bind(minimum_height=self.layout.setter('height'))
         self.scroll.add_widget(self.layout)
         self.root.add_widget(self.scroll)
+
+    def on_search_text_change(self, instance, value):
+        """Обработчик изменения текста в умном поиске"""
+        self.filter_buttons()
 
     def on_start(self):
         print("App started successfully")
@@ -1715,25 +1580,21 @@ class MyApp(App):
         self.load_existing_sounds()
 
     def open_settings(self, instance):
-        """Открывает настройки с информацией о кэше и статистике"""
+        """Открывает настройки с информацией о кэше"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
         
         permissions_status = "Granted" if self.permissions_granted else "Not granted"
-        stats_summary = self.usage_stats.get_stats_summary()
-        
-        debug_info = f"""MemeCloud v{self.CURRENT_VERSION}
+        cache_info = f"""MemeCloud v{self.CURRENT_VERSION}
 
 Debug Info:
 • Sounds loaded: {len(self.buttons)}
-• Total plays: {stats_summary['total_plays']}
 • Cache size: {len(self.sound_cache.cache)}/{self.sound_cache.max_size}
-• Most played: {stats_summary['most_played']}
 • Save dir: {self.save_dir}
 • Permissions: {permissions_status}
 • Platform: {platform}"""
 
         info_label = Label(
-            text=debug_info,
+            text=cache_info,
             size_hint_y=None,
             height=200,
             text_size=(Window.width * 0.8 - 40, None),
@@ -1746,23 +1607,14 @@ Debug Info:
         btn_layout = BoxLayout(size_hint_y=None, height=50, spacing=10)
         
         if platform == 'android':
-            # Кнопка Permissions
+            # Кнопка Permissions с уменьшенным шрифтом
             perm_btn = Button(
                 text="Permissions", 
                 background_color=(0.4, 0.4, 0.6, 1),
-                font_size='12sp'
+                font_size='12sp'  # Уменьшаем шрифт чтобы поместилось
             )
             perm_btn.bind(on_release=lambda x: self.request_android_permissions())
             btn_layout.add_widget(perm_btn)
-        
-        # Кнопка статистики
-        stats_btn = Button(
-            text="Statistics", 
-            background_color=(0.3, 0.5, 0.3, 1),
-            font_size='12sp'
-        )
-        stats_btn.bind(on_release=lambda x: self.show_statistics())
-        btn_layout.add_widget(stats_btn)
         
         # Кнопка очистки кэша
         cache_btn = Button(
@@ -1795,11 +1647,6 @@ Debug Info:
             auto_dismiss=False
         )
         close_btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-    def show_statistics(self):
-        """Показывает попап со статистикой"""
-        popup = StatisticsPopup(self)
         popup.open()
 
     def clear_sound_cache(self):
